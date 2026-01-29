@@ -7,12 +7,13 @@ from psdaq.seq.seq import Branch, ControlRequest, FixedRateSync, ACRateSync, acR
 from psdaq.seq.seqprogram import SeqUser
 
 factors = [2, 2, 2, 2, 5, 5, 5, 5, 7, 13]  # 910,000
-carbide_factors = [1, 2, 2, 5, 5, 5, 5, 13]  # 32,500 (remove 2, 2, 7, add 1)
+sc_factors = [1, 2, 2, 5, 5, 5, 5, 13]  # 32,500 (remove 2, 2, 7, add 1)
+nc_factors = [2, 2, 2, 3, 5]# 120Hz  (independent of 910k factors)
 
 
 def make_base_rates(laser_factors):
     """
-    Generate a dictionary of factors --> rates (TPG second)
+    Generate a list of factors --> rates (TPG second)
     """
     iters = [
         itertools.combinations(
@@ -88,8 +89,8 @@ def make_sequence_nc(base_div, start_ts1 = True, goose_div=None, debug=False):
     Generate an AC sequence at spacing of base_div times the base (120hz) rate for
     NC operation. 
 
-    NOTE: AC baser rates are in terms of every timeslot. Sync instructions must specify
-    a timeslot mask and a rate. There are 6 time slots each with sub 60H rate markers.
+    NOTE:  AC base rates always need to specify a timeslot. 
+           There are 6 time slots each with 60H rate markers.
 
     Parameters
     ----------
@@ -159,73 +160,78 @@ def make_base_sequence_nc():
     """
     Setup lase base rate sequences needed for running NC mode.
 
-    Rates: Full AC Rate 71,428, 35,714 
+    Rates: AC Rate 71,428, 35,714, 102, 5.1 Hz
+            70k, 35k, 100, 5 (TPG seconds)
 
-    Notes:
+    Notes
     ----
 
-    The AC power line is sampled at 1/14Mhz = 71428 Hz, 
-    so all AC crossings (LCLS 1 fiducials) are guaranteed to line 
-    up with the 71428 Hz markers.
+    The AC power line is sampled at 2/14Mhz = 35,714 Hz 
+    to guaranteed all AC crossings coincide every two 71428 Hz markers.
 
-    For carbide lasers we want to run at 35714 Hz subharmonic of 71428 Hz, 
-    having only 50% overlap with the AC crossings.
-
-    My understanding is that there is no guaranteed pattern that ensures 
-    the 35714 Hz rates will line up with the AC crossings every time,
-    because the grid voltage is not phase locked to 
-    the master occilator.
-
-    Therefore we need to "resync" to every AC marker available (360hz)
-    such that the 35714 Hz shots always line up with the AC crossings.
-
-    We might need to include more rates after disusing with lasers
- 
-    The simulator is unable to mix ac and fixed rate commands so
-    this is not tested yet.
-    ( simulations show either 910000 buckets or 
-    360 buckets frames but not at the same time)
+    To ensure we start at the correct phase, we need to sync to the AC crossing
+    before starting the 71428 Hz fixed rate sequence.
 
     """
     # initialize instruction set array
     instrset = []
     fiducial_marker = acRateHzToMarker["60Hz"] 
-    timeslot_mask = (1<<0) | (1<<1) | (1<<2) | (1<<3) # all timeslots
+     # Linac only fires on TS 1 and 4
+    timeslot_mask = (1<<0) | (1<<3)
 
+    # No need to worry about starting offsets for base rates
 
-    # No need to worry about starting offsets 
-    branch_0 = len(instrset)
-    # first sync to any of the AC crossings 
-    # (we need to trigger the 35khz we don't miss xray shots)
+    # first sync to linac to ensure in phase
     instrset.append(ACRateSync(timeslotm=timeslot_mask, marker=fiducial_marker, occ=1))
-    instrset.append(ControlRequest([0, 1])) # 70kH + 35kH
-    # after the synced AC crossing, there should be at least 198, 70KH markers
-    # and 99 35kH markers before the next AC crossing
-    #     (1/360) / (1/71,428) = ~198.4111    => / 2 = ~99.2055
-    
-    # 70k marker only 
-    instrset.append(FixedRateSync(marker="70kH", occ=1))
-    instrset.append(ControlRequest([0])) # 70kH only
 
-    # loop 98 times * 2 70 markerks = 196 + initial one = 197 markers)
+    branch_0 = len(instrset)
+    instrset.append(ControlRequest([0, 1, 2, 3])) # 70kH + 35kH + 100H + 5H
+    instrset.append(FixedRateSync(marker="70kH", occ=1))
+
     branch_1 = len(instrset)
+    _add_inner_sequence(instrset)
+
+    ## Loop 2: 100H markers per 5H marker
+    spacing_100 = 700
+    spacing_5 = 14000
+    loop_count = spacing_5 // spacing_100 - 2
+    instrset.append(Branch.conditional(line=branch_1, counter=1, value=loop_count))
+    # again last iteration has to be done manually
+    _add_inner_sequence(instrset , final=True)
+
+    instrset.append(Branch.unconditional(line=branch_0))
+
+    return instrset
+
+def _add_inner_sequence(instrset: list, final=False):
+    """
+    To make the nc sequence a little more readable, 
+    a repeated section is broken out here
+
+    Loop 1:
+    75kH + 35kH markers per 100H marker 
+    
+    final = true, do not add 100H last marker
+    """
+    # define all spacings in terms of smallest marker
+    # spacing_70k = 1
+    spacing_35k = 2
+    spacing_100 = 700
+
+    loop_count = spacing_100//spacing_35k - 2 
+    branch = len(instrset)
+    instrset.append(ControlRequest([0])) # 70kH 
     instrset.append(FixedRateSync(marker="70kH", occ=1))
     instrset.append(ControlRequest([0, 1])) # 70kH + 35kH
     instrset.append(FixedRateSync(marker="70kH", occ=1))
-    instrset.append(ControlRequest([0])) # 70kH only
-    instrset.append(Branch.conditional(line=branch_1, counter=0, value=98))
-
-    # last 70k marker before next AC sync == 198th marker 
-    # might need to take this line out (see next comment!)
+    instrset.append(Branch.conditional(line=branch, counter=0, value=loop_count))
+    # last iteration done manually since last iteration is different
+    instrset.append(ControlRequest([0])) # 70kH 
     instrset.append(FixedRateSync(marker="70kH", occ=1))
-    instrset.append(ControlRequest([0])) # 70kH only
+    if not final:
+        instrset.append(ControlRequest([0, 1, 2])) # 70kH, 35kH, 100H 
+        instrset.append(FixedRateSync(marker="70kH", occ=1))
 
-    #NOTE I am forcing the next AC sync
-    #  depending on how the AC is sampled by the sep down chassis
-    #  the sequence is either 1 or 2 70khz periods from from the AC crossing trigger 
-    #  This  will introduce jitter in the 35kHz rate but ensures we don't miss shots.
-    # I don't know if there is a better way to handle this with the current hardware
-    instrset.append(Branch.unconditional(line=branch_0))
     return instrset
 
 def make_base_sequence_sc(offset=None):
@@ -303,7 +309,7 @@ if __name__ == "__main__":
     engines = {2: 6, 3: 7}  # Bay --> sequence engine mapping
 
     # Dict will eventually be applied to drop down menu
-    base_list = make_base_rates(sc_carbide_factors)
+    base_list = make_base_rates(sc_factors)
 
     if base_rate not in base_list:
         raise ValueError(
