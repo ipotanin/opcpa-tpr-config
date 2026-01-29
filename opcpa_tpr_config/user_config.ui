@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>217</width>
-    <height>168</height>
+    <width>521</width>
+    <height>304</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -142,7 +142,7 @@
           </widget>
          </item>
          <item>
-          <widget class="SCMetadataDisplay" name="nc_metadata_widget" native="true">
+          <widget class="NCMetadataDisplay" name="nc_metadata_widget" native="true">
            <property name="sizePolicy">
             <sizepolicy hsizetype="Preferred" vsizetype="Minimum">
              <horstretch>0</horstretch>
@@ -188,6 +188,12 @@
   </customwidget>
   <customwidget>
    <class>SCMetadataDisplay</class>
+   <extends>QWidget</extends>
+   <header location="global">widgets</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>NCMetadataDisplay</class>
    <extends>QWidget</extends>
    <header location="global">widgets</header>
    <container>1</container>

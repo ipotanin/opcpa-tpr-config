@@ -73,15 +73,6 @@ class NCMetadataDisplay(Display):
 
         # self.pattern_name_rbv.set_channel(f"ca://{nc_base}:NAME")
 
-    def set_visibility(self, visible):
-        """
-        Update visibility of "expert mode" widgets based on expert mode check
-        box status.
-        """
-        self.xpm_table.setVisible(visible)
-        self.tpr_frame.setVisible(visible)
-        self.rbv_frame.setVisible(visible)
-
     def ui_filename(self):
         return "nc_metadata.ui"
 
@@ -705,12 +696,14 @@ class UserConfigDisplay(Display):
         # self.laser_config_widget.goose_arrival_box.setCurrentIndex(0)
 
         # update visibilities of key widgets
-        self.sc_metadata_widget.setVisible(self.is_superconducting)
-        self.nc_metadata_widget.setVisible(not self.is_superconducting)
         if self.is_superconducting:
+            self.sc_metadata_widget.show()
+            self.nc_metadata_widget.hide()
             self.laser_config_widget.start_timeslot_inputs.hide()
             self.laser_config_widget.start_bucket_inputs.show()
         else:
+            self.sc_metadata_widget.hide()
+            self.nc_metadata_widget.show()
             self.laser_config_widget.start_timeslot_inputs.show()
             self.laser_config_widget.start_bucket_inputs.hide()
         
