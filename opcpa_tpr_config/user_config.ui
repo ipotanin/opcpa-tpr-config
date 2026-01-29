@@ -44,6 +44,32 @@
       </widget>
      </item>
      <item>
+      <widget class="QComboBox" name="nc_sc_selection">
+       <property name="maximumSize">
+        <size>
+         <width>110</width>
+         <height>16777215</height>
+        </size>
+       </property>
+       <property name="currentIndex">
+        <number>0</number>
+       </property>
+       <property name="minimumContentsLength">
+        <number>0</number>
+       </property>
+       <item>
+        <property name="text">
+         <string>Copper Linac</string>
+        </property>
+       </item>
+       <item>
+        <property name="text">
+         <string>Superconducting Linac</string>
+        </property>
+       </item>
+      </widget>
+     </item>
+     <item>
       <widget class="QCheckBox" name="expert_checkbox">
        <property name="layoutDirection">
         <enum>Qt::RightToLeft</enum>
@@ -104,14 +130,28 @@
         </widget>
        </item>
        <item>
-        <widget class="SCMetadataDisplay" name="sc_metadata_widget" native="true">
-         <property name="sizePolicy">
-          <sizepolicy hsizetype="Preferred" vsizetype="Minimum">
-           <horstretch>0</horstretch>
-           <verstretch>0</verstretch>
-          </sizepolicy>
-         </property>
-        </widget>
+        <layout class="QVBoxLayout" name="verticalLayout">
+         <item>
+          <widget class="SCMetadataDisplay" name="sc_metadata_widget" native="true">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Preferred" vsizetype="Minimum">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="SCMetadataDisplay" name="nc_metadata_widget" native="true">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Preferred" vsizetype="Minimum">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+          </widget>
+         </item>
+        </layout>
        </item>
       </layout>
      </item>
