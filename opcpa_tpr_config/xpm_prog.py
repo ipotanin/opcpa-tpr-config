@@ -7,7 +7,7 @@ from psdaq.seq.seq import Branch, ControlRequest, FixedRateSync, ACRateSync, acR
 from psdaq.seq.seqprogram import SeqUser
 
 factors = [2, 2, 2, 2, 5, 5, 5, 5, 7, 13]  # 910,000
-sc_factors = [1, 2, 2, 5, 5, 5, 5, 13]  # 32,500 (remove 2, 2, 7, add 1)
+sc_factors = [2, 2, 2, 5, 5, 5, 5, 7]  # 35000 (remove 13, 2, add 1)
 nc_factors = [2, 2, 2, 3, 5]# 120Hz  (independent of 910k factors)
 
 
@@ -156,9 +156,9 @@ def make_sequence_nc(base_div, start_ts1 = True, goose_div=None, debug=False):
         
     return instrset
 
-def make_base_sequence_nc():
+def make_base_sequence(offset=None):
     """
-    Setup lase base rate sequences needed for running NC mode.
+    Setup base rate sequences always needed to operate the laser system.
 
     Rates: AC Rate 71,428, 35,714, 102, 5.1 Hz
             70k, 35k, 100, 5 (TPG seconds)
@@ -175,14 +175,18 @@ def make_base_sequence_nc():
     """
     # initialize instruction set array
     instrset = []
-    fiducial_marker = acRateHzToMarker["60Hz"] 
-     # Linac only fires on TS 1 and 4
-    timeslot_mask = (1<<0) | (1<<3)
 
-    # No need to worry about starting offsets for base rates
 
-    # first sync to linac to ensure in phase
-    instrset.append(ACRateSync(timeslotm=timeslot_mask, marker=fiducial_marker, occ=1))
+    # # Insert bucket offset if it is present (only possible in sc timing)
+    # if offset is not None and offset != 0:
+    #     instrset.append(FixedRateSync(marker="910kH", occ=offset))
+    # else:
+    #     # first AC Sync to linac to ensure in phase
+    #     # this may not be needed depending on how AC markers are sampled
+    #     fiducial_marker = acRateHzToMarker["60Hz"] 
+    #     # Linac only fires on TS 1 and 4
+    #     timeslot_mask = (1<<0) | (1<<3)
+    #     instrset.append(ACRateSync(timeslotm=timeslot_mask, marker=fiducial_marker, occ=1))
 
     branch_0 = len(instrset)
     instrset.append(ControlRequest([0, 1, 2, 3])) # 70kH + 35kH + 100H + 5H
@@ -233,53 +237,6 @@ def _add_inner_sequence(instrset: list, final=False):
         instrset.append(FixedRateSync(marker="70kH", occ=1))
 
     return instrset
-
-def make_base_sequence_sc(offset=None):
-    """
-    Setup standard sequence of full rate, 32500, 100, and 5 Hz codes.
-    """
-    # Do some setup
-    instrset = []
-
-    # Insert bucket offset if it is present
-    if offset is not None and offset != 0:
-        instrset.append(FixedRateSync(marker="910kH", occ=offset))
-
-    b0 = len(instrset)
-    instrset.append(ControlRequest([0, 1, 2, 3]))
-    instrset.append(FixedRateSync(marker="910kH", occ=1))
-    b1 = len(instrset)
-    instrset.append(ControlRequest([0]))
-    instrset.append(FixedRateSync(marker="910kH", occ=1))
-    instrset.append(Branch.conditional(line=b1, counter=0, value=26))
-    b2 = len(instrset)
-    instrset.append(ControlRequest([0, 1]))
-    instrset.append(FixedRateSync(marker="910kH", occ=1))
-    b3 = len(instrset)
-    instrset.append(ControlRequest([0]))
-    instrset.append(FixedRateSync(marker="910kH", occ=1))
-    instrset.append(Branch.conditional(line=b3, counter=0, value=26))
-    instrset.append(Branch.conditional(line=b2, counter=1, value=323))
-    b4 = len(instrset)
-    instrset.append(ControlRequest([0, 1, 2]))
-    instrset.append(FixedRateSync(marker="910kH", occ=1))
-    b5 = len(instrset)
-    instrset.append(ControlRequest([0]))
-    instrset.append(FixedRateSync(marker="910kH", occ=1))
-    instrset.append(Branch.conditional(line=b5, counter=0, value=26))
-    b6 = len(instrset)
-    instrset.append(ControlRequest([0, 1]))
-    instrset.append(FixedRateSync(marker="910kH", occ=1))
-    b7 = len(instrset)
-    instrset.append(ControlRequest([0]))
-    instrset.append(FixedRateSync(marker="910kH", occ=1))
-    instrset.append(Branch.conditional(line=b7, counter=0, value=26))
-    instrset.append(Branch.conditional(line=b6, counter=1, value=323))
-    instrset.append(Branch.conditional(line=b4, counter=2, value=18))
-    instrset.append(Branch.unconditional(line=b0))
-
-    return instrset
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

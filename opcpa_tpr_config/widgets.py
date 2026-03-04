@@ -14,8 +14,8 @@ from pydm import widgets as pydm_widgets
 from qtpy import QtWidgets
 from xpm_prog import (allowed_goose_rates, sc_factors, nc_factors,
                 make_base_rates,
-                make_base_sequence_sc, make_sequence_sc,
-                make_base_sequence_nc, make_sequence_nc
+                make_base_sequence, make_sequence_sc,
+                make_sequence_nc
                 )
 
 logger = logging.getLogger(__name__)
@@ -310,7 +310,7 @@ class LaserConfigDisplay(Display):
         # Restrict allowed rates to > 1kHz for sc and >5hz for NC, but keep all rates in
         # self._base_rates for allowed goose rate calculation
         if is_superconducting:
-            rate_limit = 1000
+            rate_limit = 100
         else:
             rate_limit = 5
         for rate in self._base_rates:
@@ -850,14 +850,12 @@ class UserConfigDisplay(Display):
             print(f"Offset: {self.offset}")
 
         bay = self._config['main']['bay']
+        seqdesc = {0: f"{bay} 71.4kHz", 1: f"{bay} 35.7kHz", 2: f"{bay} 102Hz",
+                3: f"{bay} 5Hz"}
         if self.is_superconducting:
-            instrset = make_base_sequence_sc(self.offset)
-            seqdesc = {0: f"{bay} 910kHz", 1: f"{bay} 32.5kHz", 2: f"{bay} 100Hz",
-                    3: f"{bay} 5Hz"}
+            instrset = make_base_sequence(self.offset)
         else:
-            instrset = make_base_sequence_nc()
-            seqdesc = {0: f"{bay} 71.4kHz", 1: f"{bay} 35.7kHz", 2: f"{bay} 102Hz",
-                    3: f"{bay} 5Hz"}
+            instrset = make_base_sequence(None)
 
 
         self.write_xpm_config(seqdesc, instrset, self._BaseSeq, self._engine2)
