@@ -153,12 +153,15 @@ class LaserConfigDisplay(Display):
     start_timeslot_inputs: QtWidgets.QWidget
     nc_timeslot_selector: QtWidgets.QComboBox
 
-    start_bucket_inputs: QtWidgets.QWidget
+    start_bucket_inputs_sc: QtWidgets.QWidget
     sc_bucket_control_box: QtWidgets.QComboBox
     sc_bucket_edit: QtWidgets.QLineEdit
     sc_bucket_rbv: pydm_widgets.PyDMLabel
     sc_bucket_is_synced: pydm_widgets.PyDMByteIndicator
     sc_bucket_is_synced_label: pydm_widgets.PyDMLabel
+    
+    start_bucket_inputs_nc: QtWidgets.QWidget
+    nc_bucket_edit: QtWidgets.QLineEdit
 
     timestamp_rbv: pydm_widgets.PyDMLabel
 
@@ -406,8 +409,12 @@ class LaserConfigDisplay(Display):
         self.sc_bucket_edit.setVisible(self.bucket_control_enabled)
 
     @property
-    def manual_bucket(self):
+    def sc_manual_bucket(self):
         return int(self.sc_bucket_edit.text())
+
+    @property
+    def nc_manual_bucket(self):
+        return int(self.nc_bucket_edit.text())
 
 
 class ExpertDisplay(Display):
@@ -700,12 +707,14 @@ class UserConfigDisplay(Display):
             self.sc_metadata_widget.show()
             self.nc_metadata_widget.hide()
             self.laser_config_widget.start_timeslot_inputs.hide()
-            self.laser_config_widget.start_bucket_inputs.show()
+            self.laser_config_widget.start_bucket_inputs_sc.show()
+            self.laser_config_widget.start_bucket_inputs_nc.hide()
         else:
             self.sc_metadata_widget.hide()
             self.nc_metadata_widget.show()
             self.laser_config_widget.start_timeslot_inputs.show()
-            self.laser_config_widget.start_bucket_inputs.hide()
+            self.laser_config_widget.start_bucket_inputs_sc.hide()
+            self.laser_config_widget.start_bucket_inputs_nc.show()
         
 
     @property
@@ -738,13 +747,16 @@ class UserConfigDisplay(Display):
         """
         Return the SC bucket offset to be used in pattern generation.
         """
-        # Use manual SC bucket if enabled
-        if self.laser_config_widget.bucket_control_enabled:
-            val = self.laser_config_widget.manual_bucket
-        # Otherwise try to detect offset from AD PVs
+        if self.is_superconducting:
+            # Use manual SC bucket if enabled
+            if self.laser_config_widget.bucket_control_enabled:
+                val = self.laser_config_widget.nc_manual_bucket
+            # Otherwise try to detect offset from AD PVs
+            else:
+                # This is a float PV for some reason
+                val = int(self.sc_metadata_widget.offset_rbv.value)
         else:
-            # This is a float PV for some reason
-            val = int(self.sc_metadata_widget.offset_rbv.value)
+            val = self.laser_config_widget.nc_manual_bucket
 
         return val
 
@@ -852,10 +864,7 @@ class UserConfigDisplay(Display):
         bay = self._config['main']['bay']
         seqdesc = {0: f"{bay} 71.4kHz", 1: f"{bay} 35.7kHz", 2: f"{bay} 102Hz",
                 3: f"{bay} 5Hz"}
-        if self.is_superconducting:
-            instrset = make_base_sequence(self.offset)
-        else:
-            instrset = make_base_sequence(None)
+        instrset = make_base_sequence(self.offset)
 
 
         self.write_xpm_config(seqdesc, instrset, self._BaseSeq, self._engine2)
