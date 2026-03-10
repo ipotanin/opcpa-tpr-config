@@ -183,8 +183,8 @@ def make_base_sequence(offset=None):
         offset = 0
 
     branch_0 = len(instrset)
-    instrset.append(FixedRateSync(marker="70kH", occ=1))
     _add_offset_request(instrset, [0, 1, 2, 3], offset) # 70kH + 35kH + 100H + 5H
+    instrset.append(FixedRateSync(marker="70kH", occ=1))
     branch_1 = len(instrset)
     _add_inner_sequence(instrset, offset=offset)
 
