@@ -156,6 +156,7 @@ def make_sequence_nc(base_div, start_ts1 = True, goose_div=None, debug=False):
         
     return instrset
 
+
 def make_base_sequence(offset=None):
     """
     Setup base rate sequences always needed to operate the laser system.
@@ -169,31 +170,23 @@ def make_base_sequence(offset=None):
     The AC power line is sampled at 2/14Mhz = 35,714 Hz 
     to guaranteed all AC crossings coincide every two 71428 Hz markers.
 
-    To ensure we start at the correct phase, we need to sync to the AC crossing
-    before starting the 71428 Hz fixed rate sequence.
+    During testing it was observed the ACRateSync was observed to have an
+    offset of 7 910kH markers from the corresponding 70kH fixedRateSync.
+
+    This offset might change from 7, so the offset selection is kept even for AC rates
 
     """
     # initialize instruction set array
     instrset = []
 
-
-    # # Insert bucket offset if it is present (only possible in sc timing)
-    # if offset is not None and offset != 0:
-    #     instrset.append(FixedRateSync(marker="910kH", occ=offset))
-    # else:
-    #     # first AC Sync to linac to ensure in phase
-    #     # this may not be needed depending on how AC markers are sampled
-    #     fiducial_marker = acRateHzToMarker["60Hz"] 
-    #     # Linac only fires on TS 1 and 4
-    #     timeslot_mask = (1<<0) | (1<<3)
-    #     instrset.append(ACRateSync(timeslotm=timeslot_mask, marker=fiducial_marker, occ=1))
+    if offset is None:
+        offset = 0
 
     branch_0 = len(instrset)
-    instrset.append(ControlRequest([0, 1, 2, 3])) # 70kH + 35kH + 100H + 5H
     instrset.append(FixedRateSync(marker="70kH", occ=1))
-
+    _add_offset_request(instrset, [0, 1, 2, 3], offset) # 70kH + 35kH + 100H + 5H
     branch_1 = len(instrset)
-    _add_inner_sequence(instrset)
+    _add_inner_sequence(instrset, offset=offset)
 
     ## Loop 2: 100H markers per 5H marker
     spacing_100 = 700
@@ -201,13 +194,20 @@ def make_base_sequence(offset=None):
     loop_count = spacing_5 // spacing_100 - 2
     instrset.append(Branch.conditional(line=branch_1, counter=1, value=loop_count))
     # again last iteration has to be done manually
-    _add_inner_sequence(instrset , final=True)
+    _add_inner_sequence(instrset, offset=offset, final=True)
 
     instrset.append(Branch.unconditional(line=branch_0))
 
     return instrset
 
-def _add_inner_sequence(instrset: list, final=False):
+def _add_offset_request(instrset: list, request, offset) -> list:
+    """ helper function adds control requests with appropriate offset"""
+    if offset != 0:
+        instrset.append(FixedRateSync(marker="910kH", occ=offset))
+    instrset.append(ControlRequest(request))
+
+
+def _add_inner_sequence(instrset: list, offset=None, final=False):
     """
     To make the nc sequence a little more readable, 
     a repeated section is broken out here
@@ -224,18 +224,17 @@ def _add_inner_sequence(instrset: list, final=False):
 
     loop_count = spacing_100//spacing_35k - 2 
     branch = len(instrset)
-    instrset.append(ControlRequest([0])) # 70kH 
+    _add_offset_request(instrset, [0], offset) #70kH
     instrset.append(FixedRateSync(marker="70kH", occ=1))
-    instrset.append(ControlRequest([0, 1])) # 70kH + 35kH
+    _add_offset_request(instrset, [0, 1], offset) #70kH + 35KH
     instrset.append(FixedRateSync(marker="70kH", occ=1))
     instrset.append(Branch.conditional(line=branch, counter=0, value=loop_count))
     # last iteration done manually since last iteration is different
-    instrset.append(ControlRequest([0])) # 70kH 
+    _add_offset_request(instrset, [0], offset) #70kH
     instrset.append(FixedRateSync(marker="70kH", occ=1))
     if not final:
-        instrset.append(ControlRequest([0, 1, 2])) # 70kH, 35kH, 100H 
+        _add_offset_request(instrset, [0, 1, 2], offset) #70kH + 35KH + 100H
         instrset.append(FixedRateSync(marker="70kH", occ=1))
-
     return instrset
 
 if __name__ == "__main__":
