@@ -310,7 +310,7 @@ class LaserConfigDisplay(Display):
         # Restrict allowed rates to > 1kHz for sc and >5hz for NC, but keep all rates in
         # self._base_rates for allowed goose rate calculation
         if is_superconducting:
-            rate_limit = 100
+            rate_limit = 300
         else:
             rate_limit = 5
         for rate in self._base_rates:
