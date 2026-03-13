@@ -864,8 +864,8 @@ class UserConfigDisplay(Display):
         bay = self._config['main']['bay']
         seqdesc = {0: f"{bay} 71.4kHz", 1: f"{bay} 35.7kHz", 2: f"{bay} 102Hz",
                 3: f"{bay} 5Hz"}
-        instrset = make_base_sequence(self.offset)
 
+        instrset = make_base_sequence(self.offset, firstSyncAC=(not self.is_superconducting))
 
         self.write_xpm_config(seqdesc, instrset, self._BaseSeq, self._engine2)
 

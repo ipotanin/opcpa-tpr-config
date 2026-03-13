@@ -157,7 +157,7 @@ def make_sequence_nc(base_div, start_ts1 = True, goose_div=None, debug=False):
     return instrset
 
 
-def make_base_sequence(offset=None):
+def make_base_sequence(offset=None, firstSyncAC=False):
     """
     Setup base rate sequences always needed to operate the laser system.
 
@@ -181,6 +181,13 @@ def make_base_sequence(offset=None):
 
     if offset is None:
         offset = 0
+
+    if firstSyncAC:
+        timeslot_mask = (1<<0) | (1<<3)
+        fiducial_marker = acRateHzToMarker["60Hz"] 
+        instrset.append(ACRateSync(timeslotm=timeslot_mask, marker=fiducial_marker, occ=1))
+        # needed so first offset_request() starts at a 70H marker
+        instrset.append(FixedRateSync(marker="70kH", occ=2))
 
     branch_0 = len(instrset)
     _add_offset_request(instrset, [0, 1, 2, 3], offset) # 70kH + 35kH + 100H + 5H
