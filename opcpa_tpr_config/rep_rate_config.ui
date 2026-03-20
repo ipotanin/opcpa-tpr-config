@@ -341,7 +341,7 @@
              <string>99</string>
             </property>
             <property name="text">
-             <string>7</string>
+             <string>0</string>
             </property>
             <property name="alignment">
              <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
