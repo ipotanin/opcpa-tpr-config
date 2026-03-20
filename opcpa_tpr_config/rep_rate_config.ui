@@ -356,7 +356,7 @@
            </widget>
           </item>
           <item>
-           <widget class="PyDMLabel" name="sc_bucket_rbv_2">
+           <widget class="PyDMLabel" name="nc_bucket_rbv">
             <property name="toolTip">
              <string/>
             </property>

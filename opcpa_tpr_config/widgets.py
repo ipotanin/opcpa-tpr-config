@@ -157,6 +157,7 @@ class LaserConfigDisplay(Display):
     sc_bucket_control_box: QtWidgets.QComboBox
     sc_bucket_edit: QtWidgets.QLineEdit
     sc_bucket_rbv: pydm_widgets.PyDMLabel
+    nc_bucket_rbv: pydm_widgets.PyDMLabel
     sc_bucket_is_synced: pydm_widgets.PyDMByteIndicator
     sc_bucket_is_synced_label: pydm_widgets.PyDMLabel
     
@@ -260,6 +261,7 @@ class LaserConfigDisplay(Display):
         # "Notepad" PVs
         notepad_pv = self._config['main']['notepad_pv']
         self.sc_bucket_rbv.set_channel(f"ca://{notepad_pv}:SC_BUCKET")
+        self.nc_bucket_rbv.set_channel(f"ca://{notepad_pv}:SC_BUCKET")
         self.timestamp_rbv.set_channel(f"ca://{notepad_pv}:SC_TIMESTAMP")
 
         # start buckets synced indicator
