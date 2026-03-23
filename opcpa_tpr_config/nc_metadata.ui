@@ -24,55 +24,41 @@
       </font>
      </property>
      <property name="text">
-      <string>SC X-ray Status</string>
+      <string>NC X-ray Status</string>
      </property>
     </widget>
    </item>
    <item>
     <layout class="QGridLayout" name="sc_grid_layout">
-     <item row="0" column="1">
-      <widget class="PyDMLabel" name="pattern_name_rbv">
+     <item row="1" column="1">
+      <widget class="PyDMLabel" name="nc_rate_rbv">
        <property name="toolTip">
         <string/>
        </property>
        <property name="alignment">
         <set>Qt::AlignCenter</set>
-       </property>
-      </widget>
-     </item>
-     <item row="2" column="1">
-      <widget class="PyDMLabel" name="time_source_rbv">
-       <property name="toolTip">
-        <string/>
-       </property>
-       <property name="alignment">
-        <set>Qt::AlignCenter</set>
-       </property>
-      </widget>
-     </item>
-     <item row="3" column="0">
-      <widget class="QLabel" name="offset_rbv_label">
-       <property name="text">
-        <string>Offset RBV</string>
        </property>
       </widget>
      </item>
      <item row="4" column="0">
-      <widget class="QLabel" name="time_slot_label">
+      <widget class="QLabel" name="time_slot_mask_label">
        <property name="text">
-        <string>Time Slot</string>
-       </property>
-      </widget>
-     </item>
-     <item row="0" column="0">
-      <widget class="QLabel" name="name_label">
-       <property name="text">
-        <string>Name</string>
+        <string>Time Slot Mask</string>
        </property>
       </widget>
      </item>
      <item row="4" column="1">
-      <widget class="PyDMLabel" name="time_slot_rbv">
+      <widget class="PyDMLabel" name="nc_time_slot_mask_rbv">
+       <property name="toolTip">
+        <string/>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+     </item>
+     <item row="0" column="1">
+      <widget class="PyDMLabel" name="nc_pattern_name_rbv">
        <property name="toolTip">
         <string/>
        </property>
@@ -95,18 +81,8 @@
        </property>
       </widget>
      </item>
-     <item row="1" column="1">
-      <widget class="PyDMLabel" name="rate_rbv">
-       <property name="toolTip">
-        <string/>
-       </property>
-       <property name="alignment">
-        <set>Qt::AlignCenter</set>
-       </property>
-      </widget>
-     </item>
      <item row="3" column="1">
-      <widget class="PyDMLabel" name="offset_rbv">
+      <widget class="PyDMLabel" name="nc_time_slot_rbv">
        <property name="toolTip">
         <string/>
        </property>
@@ -115,20 +91,27 @@
        </property>
       </widget>
      </item>
-     <item row="5" column="0">
-      <widget class="QLabel" name="time_slot_mask_label">
+     <item row="3" column="0">
+      <widget class="QLabel" name="time_slot_label">
        <property name="text">
-        <string>Time Slot Mask</string>
+        <string>Time Slot</string>
        </property>
       </widget>
      </item>
-     <item row="5" column="1">
-      <widget class="PyDMLabel" name="time_slot_mask_rbv">
+     <item row="2" column="1">
+      <widget class="PyDMLabel" name="nc_time_source_rbv">
        <property name="toolTip">
         <string/>
        </property>
        <property name="alignment">
         <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+     </item>
+     <item row="0" column="0">
+      <widget class="QLabel" name="name_label">
+       <property name="text">
+        <string>Name</string>
        </property>
       </widget>
      </item>

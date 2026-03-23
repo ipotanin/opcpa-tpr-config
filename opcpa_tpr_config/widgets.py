@@ -12,8 +12,11 @@ from psdaq.seq.seqprogram import SeqUser
 from pydm import Display
 from pydm import widgets as pydm_widgets
 from qtpy import QtWidgets
-from xpm_prog import (allowed_goose_rates, carbide_factors, make_base_rates,
-                      make_base_sequence, make_sequence)
+from xpm_prog import (allowed_goose_rates, sc_factors, nc_factors,
+                make_base_rates,
+                make_base_sequence, make_sequence_sc,
+                make_sequence_nc
+                )
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +28,58 @@ def read_config(config_file):
     with open(config_file, "r") as f:
         conf = yaml.safe_load(f)
     return conf
+
+class NCMetadataDisplay(Display):
+    """
+    Class for copper linac xray metatdata user display.
+    """
+    def __init__(
+        self,
+        parent=QtWidgets.QWidget,
+        **kwargs
+    ):
+        super().__init__(parent, **kwargs)
+
+    def setup_display(self, config, debug):
+        """
+        Run the things we would run during init but can't because I can't
+        figure out how to pass variables to sub-displays at init....
+        """
+        self._debug = debug
+
+        self._config = read_config(config)
+        if self._config is None:
+            raise ValueError(f"Could not read config file {config}")
+
+        if self._debug:
+            print(f"Read configuration file: {config}")
+            cfg_keys = self._config.keys()
+            print(f"Configuration sections: {cfg_keys}")
+            print(self._config)
+
+        self.update_pvs()
+
+    def update_pvs(self):
+        """
+        Modify RBV widgets to use the PV(s) specified in the config file.
+        """
+        #  metadata
+        nc_base = self._config['main']['nc_meta_pv']
+
+        if self._debug:
+            print(f"SC metadata base PV: {nc_base}")
+
+        # TODO: find relevant NC metadata PVs to display
+
+        # self.pattern_name_rbv.set_channel(f"ca://{nc_base}:NAME")
+
+    def ui_filename(self):
+        return "nc_metadata.ui"
+
+    def ui_filepath(self):
+        return path.join(
+            path.dirname(path.realpath(__file__)), self.ui_filename()
+        )
 
 
 class SCMetadataDisplay(Display):
@@ -62,7 +117,7 @@ class SCMetadataDisplay(Display):
         Modify RBV widgets to use the PV(s) specified in the config file.
         """
         # SC metadata
-        sc_base = self._config['main']['meta_pv']
+        sc_base = self._config['main']['sc_meta_pv']
 
         if self._debug:
             print(f"SC metadata base PV: {sc_base}")
@@ -95,11 +150,19 @@ class LaserConfigDisplay(Display):
     all_shots_ec_rbv: pydm_widgets.PyDMLabel
     all_shots_rate_rbv: pydm_widgets.PyDMLabel
 
+    start_timeslot_inputs: QtWidgets.QWidget
+    nc_timeslot_selector: QtWidgets.QComboBox
+
+    start_bucket_inputs_sc: QtWidgets.QWidget
     sc_bucket_control_box: QtWidgets.QComboBox
     sc_bucket_edit: QtWidgets.QLineEdit
     sc_bucket_rbv: pydm_widgets.PyDMLabel
+    nc_bucket_rbv: pydm_widgets.PyDMLabel
     sc_bucket_is_synced: pydm_widgets.PyDMByteIndicator
     sc_bucket_is_synced_label: pydm_widgets.PyDMLabel
+    
+    start_bucket_inputs_nc: QtWidgets.QWidget
+    nc_bucket_edit: QtWidgets.QLineEdit
 
     timestamp_rbv: pydm_widgets.PyDMLabel
 
@@ -148,9 +211,8 @@ class LaserConfigDisplay(Display):
 
         self.update_pvs()
 
-        self._base_rates = make_base_rates(carbide_factors)
-
-        self.update_base_rates()
+        self._base_rates: list = make_base_rates(nc_factors)
+        self.update_base_rates(False)
 
         self.update_goose_rates()
         self.update_goose_arrival()
@@ -199,10 +261,11 @@ class LaserConfigDisplay(Display):
         # "Notepad" PVs
         notepad_pv = self._config['main']['notepad_pv']
         self.sc_bucket_rbv.set_channel(f"ca://{notepad_pv}:SC_BUCKET")
+        self.nc_bucket_rbv.set_channel(f"ca://{notepad_pv}:SC_BUCKET")
         self.timestamp_rbv.set_channel(f"ca://{notepad_pv}:SC_TIMESTAMP")
 
         # start buckets synced indicator
-        sc_base = self._config['main']['meta_pv']
+        sc_base = self._config['main']['sc_meta_pv']
         self.sc_bucket_is_synced.set_channel(
             f"calc://compare_buckets?"
             f"laser_bucket=ca://{notepad_pv}:SC_BUCKET&"
@@ -242,21 +305,39 @@ class LaserConfigDisplay(Display):
             path.dirname(path.realpath(__file__)), self.ui_filename()
         )
 
-    def update_base_rates(self):
-        if self._base_rates is not None:
-            for rate in self._base_rates:
-                # Restrict allowed rates to > 1kHz, but keep all rates in
-                # self._base_rates for allowed goose rate calculation
-                # TODO: The calculation of goose rates could probably be
-                # decoupled from the base rate array.
-                if rate >= 1000:
-                    self.total_rate_box.addItem(str(rate))
-            if self._debug:
-                print(f"Allowed base rates: {self._base_rates}")
+    def update_base_rates(self, is_superconducting):
+        if is_superconducting:
+            factors = sc_factors
+        else:
+            factors = nc_factors
+        
+        self._base_rates = make_base_rates(factors)
+        # Restrict allowed rates to > 1kHz for sc and >5hz for NC, but keep all rates in
+        # self._base_rates for allowed goose rate calculation
+        if is_superconducting:
+            rate_limit = 300
+        else:
+            rate_limit = 5
+        for rate in self._base_rates:
+            # TODO: The calculation of goose rates could probably be
+            # decoupled from the base rate array.
+            if rate <rate_limit:
+                continue
+            self.total_rate_box.addItem(str(rate))
+        
+        # always select the highest rate when switching menus
+        self.total_rate_box.setCurrentIndex(self.total_rate_box.count() - 1)
+
+        if self._debug:
+            print(f"Allowed base rates: {self._base_rates}")
 
     @property
     def base_rate(self):
-        return int(self.total_rate_box.currentText())
+        text_selection = self.total_rate_box.currentText()
+        if text_selection == "":
+            #needed when switching between NC and SC
+            return None
+        return int(text_selection)
 
     def update_goose_vis(self):
         """
@@ -267,7 +348,7 @@ class LaserConfigDisplay(Display):
         self.goose_rate_label.setVisible(self.goose_enabled)
 
     def update_goose_rates(self):
-        if self._base_rates is not None:
+        if self._base_rates is not None and self.base_rate is not None:
             goose_rates = allowed_goose_rates(
                 self.base_rate,
                 self._base_rates
@@ -314,6 +395,11 @@ class LaserConfigDisplay(Display):
             self.sc_bucket_control_box.addItem(mode)
 
     @property
+    def start_ts1(self) -> bool:
+        """  Starts on TS1 if True, TS4 if False"""
+        return self.nc_timeslot_selector.currentIndex() == 0
+
+    @property
     def bucket_control_enabled(self):
         txt = self.sc_bucket_control_box.currentText()
         if txt != "Auto":
@@ -325,8 +411,12 @@ class LaserConfigDisplay(Display):
         self.sc_bucket_edit.setVisible(self.bucket_control_enabled)
 
     @property
-    def manual_bucket(self):
+    def sc_manual_bucket(self):
         return int(self.sc_bucket_edit.text())
+
+    @property
+    def nc_manual_bucket(self):
+        return int(self.nc_bucket_edit.text())
 
 
 class ExpertDisplay(Display):
@@ -522,9 +612,13 @@ class UserConfigDisplay(Display):
 
     # Top level widgets
     screen_title: pydm_widgets.PyDMLabel
+    nc_sc_selection: QtWidgets.QComboBox
 
     # SC Metadata
     sc_metadata_widget: SCMetadataDisplay
+
+    # NC Metadata
+    nc_metadata_widget: NCMetadataDisplay
 
     # Laser Config
     laser_config_widget: LaserConfigDisplay
@@ -545,6 +639,8 @@ class UserConfigDisplay(Display):
         self.laser_config_widget.setup_display(config, debug)
 
         self.sc_metadata_widget.setup_display(config, debug)
+
+        self.nc_metadata_widget.setup_display(config, debug)
 
         self.expert_display_widget.setup_display(config, debug)
 
@@ -572,10 +668,16 @@ class UserConfigDisplay(Display):
 
         self.update_expert_vis()
 
+        self.update_sc_nc()
+
         self.laser_config_widget.apply_button.clicked.connect(
             self.apply_config
         )
         self.expert_checkbox.stateChanged.connect(self.update_expert_vis)
+
+        self.nc_sc_selection.currentIndexChanged.connect(
+            self.update_sc_nc
+        )
 
     def ui_filename(self):
         return "user_config.ui"
@@ -587,6 +689,35 @@ class UserConfigDisplay(Display):
 
     def update_expert_vis(self):
         self.expert_display_widget.set_visibility(self.expert_mode)
+
+
+    def update_sc_nc(self):
+        """
+        Resets widgets based on user selections of Linac type (NC or SC).
+        """
+        # first clear previous rates
+        self._base_rates = None
+        self.laser_config_widget.total_rate_box.clear()
+
+        #then re_init them
+        self.laser_config_widget.update_base_rates(self.is_superconducting)
+        # always reset goose config selection
+        # self.laser_config_widget.goose_arrival_box.setCurrentIndex(0)
+
+        # update visibilities of key widgets
+        if self.is_superconducting:
+            self.sc_metadata_widget.show()
+            self.nc_metadata_widget.hide()
+            self.laser_config_widget.start_timeslot_inputs.hide()
+            self.laser_config_widget.start_bucket_inputs_sc.show()
+            self.laser_config_widget.start_bucket_inputs_nc.hide()
+        else:
+            self.sc_metadata_widget.hide()
+            self.nc_metadata_widget.show()
+            self.laser_config_widget.start_timeslot_inputs.show()
+            self.laser_config_widget.start_bucket_inputs_sc.hide()
+            self.laser_config_widget.start_bucket_inputs_nc.show()
+        
 
     @property
     def debug(self):
@@ -608,19 +739,26 @@ class UserConfigDisplay(Display):
     @property
     def expert_mode(self):
         return self.expert_checkbox.isChecked()
+    
+    @property
+    def is_superconducting(self):
+        return self.nc_sc_selection.currentIndex() == 1
 
     @property
     def offset(self):
         """
         Return the SC bucket offset to be used in pattern generation.
         """
-        # Use manual SC bucket if enabled
-        if self.laser_config_widget.bucket_control_enabled:
-            val = self.laser_config_widget.manual_bucket
-        # Otherwise try to detect offset from AD PVs
+        if self.is_superconducting:
+            # Use manual SC bucket if enabled
+            if self.laser_config_widget.bucket_control_enabled:
+                val = self.laser_config_widget.nc_manual_bucket
+            # Otherwise try to detect offset from AD PVs
+            else:
+                # This is a float PV for some reason
+                val = int(self.sc_metadata_widget.offset_rbv.value)
         else:
-            # This is a float PV for some reason
-            val = int(self.sc_metadata_widget.offset_rbv.value)
+            val = self.laser_config_widget.nc_manual_bucket
 
         return val
 
@@ -687,9 +825,12 @@ class UserConfigDisplay(Display):
         Generate and apply the XPM configuration for the laser on/off time
         event codes.
         """
-        base_div = 910000//self.laser_config_widget.base_rate
+
+        fiducials_per_period = 910000 if self.is_superconducting else 120        
+
+        base_div = fiducials_per_period//self.laser_config_widget.base_rate
         if self.laser_config_widget.goose_enabled:
-            goose_div = 910000//self.laser_config_widget.goose_rate
+            goose_div = fiducials_per_period//self.laser_config_widget.goose_rate
         else:
             goose_div = None
 
@@ -702,7 +843,10 @@ class UserConfigDisplay(Display):
             print(f"Goose div: {goose_div}")
             print(f"Offset: {self.offset}")
 
-        instrset = make_sequence(base_div, goose_div, self.offset, self._debug)
+        if self.is_superconducting:
+            instrset = make_sequence_sc(base_div, goose_div, self.offset, self._debug)
+        else:
+            instrset = make_sequence_nc(base_div, self.laser_config_widget.start_ts1, goose_div) 
 
         bay = self._config['main']['bay']
         seqdesc = {0: f"{bay} On time shots", 1: f"{bay} Goose shots",
@@ -719,11 +863,11 @@ class UserConfigDisplay(Display):
             print("Applying base rates")
             print(f"Offset: {self.offset}")
 
-        instrset = make_base_sequence(self.offset)
-
         bay = self._config['main']['bay']
-        seqdesc = {0: f"{bay} 910kHz", 1: f"{bay} 32.5kHz", 2: f"{bay} 100Hz",
-                   3: f"{bay} 5Hz"}
+        seqdesc = {0: f"{bay} 71.4kHz", 1: f"{bay} 35.7kHz", 2: f"{bay} 102Hz",
+                3: f"{bay} 5Hz"}
+
+        instrset = make_base_sequence(self.offset, firstSyncAC=(not self.is_superconducting))
 
         self.write_xpm_config(seqdesc, instrset, self._BaseSeq, self._engine2)
 

@@ -3,16 +3,17 @@ import itertools
 
 import numpy as np
 from psdaq.cas.pvedit import Pv
-from psdaq.seq.seq import Branch, ControlRequest, FixedRateSync
+from psdaq.seq.seq import Branch, ControlRequest, FixedRateSync, ACRateSync, acRateHzToMarker
 from psdaq.seq.seqprogram import SeqUser
 
 factors = [2, 2, 2, 2, 5, 5, 5, 5, 7, 13]  # 910,000
-carbide_factors = [1, 2, 2, 5, 5, 5, 5, 13]  # 32,500 (remove 2, 2, 7, add 1)
+sc_factors = [2, 2, 2, 5, 5, 5, 5, 7]  # 35000 (remove 13, 2, add 1)
+nc_factors = [2, 2, 2, 3, 5]# 120Hz  (independent of 910k factors)
 
 
 def make_base_rates(laser_factors):
     """
-    Generate a dictionary of factors --> rates (TPG second)
+    Generate a list of factors --> rates (TPG second)
     """
     iters = [
         itertools.combinations(
@@ -38,7 +39,7 @@ def allowed_goose_rates(base_rate, rate_list):
 
 
 # Selected base rate + goose rate --> pulse sequence
-def make_sequence(base_div, goose_div=None, offset=None, debug=False):
+def make_sequence_sc(base_div, goose_div=None, offset=None, debug=False):
     # Do some setup
     instrset = []
 
@@ -83,53 +84,165 @@ def make_sequence(base_div, goose_div=None, offset=None, debug=False):
 
     return instrset
 
+def make_sequence_nc(base_div, start_ts1 = True, goose_div=None, debug=False):
+    """
+    Generate an AC sequence at spacing of base_div times the base (120hz) rate for
+    NC operation. 
 
-def make_base_sequence(offset=None):
+    NOTE:  AC base rates always need to specify a timeslot. 
+           There are 6 time slots each with 60H rate markers.
+
+    Parameters
+    ----------
+    base_div
+       divisor in units of beams (120hz)
+       1 => full rate 120HZ, 2 for 60Hz, 3 for 40Hz, etc.
+       rate = 120 / base_div
+    start_ts1, optional
+        if True, start synced to TS1, else TS4
+        Only changes pattern if rate is a sub-harmonic of 60 Hz
+    goose_div, optional
+        Goose trigger divisor (same units as base_div)
+        Must be integer multiple of base_div!
+    debug, optional
+        add print statements, by default False
+
+    Notes
+    -------
+    
+    Confluence Docs are inconsistent with the library definitions used here! 
+    Confluence examples show that "marker 0" corresponds to 60H rate,
+    but in the acRateHzToMarker dictionary in seq.py, clearly maps "60H" maps to "marker 5".
+
+    I used the library definitions here for correct simulations
+    but this should be verified on hardware!
     """
-    Setup standard sequence of full rate, 32500, 100, and 5 Hz codes.
-    """
+ 
     # Do some setup
     instrset = []
+    
+    fiducial_marker = acRateHzToMarker["60Hz"] 
+   
+    # sync the fist shot
+    if start_ts1:
+        timeslot_mask = (1<<0) 
+    else:
+        timeslot_mask = (1<<3)
+    instrset.append(ACRateSync(timeslotm=timeslot_mask, marker=fiducial_marker, occ=1))
 
-    # Insert bucket offset if it is present
-    if offset is not None and offset != 0:
-        instrset.append(FixedRateSync(marker="910kH", occ=offset))
+    # Linac only fires on TS 1 and 4
+    timeslot_mask = (1<<0) | (1<<3)
 
-    b0 = len(instrset)
-    instrset.append(ControlRequest([0, 1, 2, 3]))
-    instrset.append(FixedRateSync(marker="910kH", occ=1))
-    b1 = len(instrset)
-    instrset.append(ControlRequest([0]))
-    instrset.append(FixedRateSync(marker="910kH", occ=1))
-    instrset.append(Branch.conditional(line=b1, counter=0, value=26))
-    b2 = len(instrset)
-    instrset.append(ControlRequest([0, 1]))
-    instrset.append(FixedRateSync(marker="910kH", occ=1))
-    b3 = len(instrset)
-    instrset.append(ControlRequest([0]))
-    instrset.append(FixedRateSync(marker="910kH", occ=1))
-    instrset.append(Branch.conditional(line=b3, counter=0, value=26))
-    instrset.append(Branch.conditional(line=b2, counter=1, value=323))
-    b4 = len(instrset)
-    instrset.append(ControlRequest([0, 1, 2]))
-    instrset.append(FixedRateSync(marker="910kH", occ=1))
-    b5 = len(instrset)
-    instrset.append(ControlRequest([0]))
-    instrset.append(FixedRateSync(marker="910kH", occ=1))
-    instrset.append(Branch.conditional(line=b5, counter=0, value=26))
-    b6 = len(instrset)
-    instrset.append(ControlRequest([0, 1]))
-    instrset.append(FixedRateSync(marker="910kH", occ=1))
-    b7 = len(instrset)
-    instrset.append(ControlRequest([0]))
-    instrset.append(FixedRateSync(marker="910kH", occ=1))
-    instrset.append(Branch.conditional(line=b7, counter=0, value=26))
-    instrset.append(Branch.conditional(line=b6, counter=1, value=323))
-    instrset.append(Branch.conditional(line=b4, counter=2, value=18))
-    instrset.append(Branch.unconditional(line=b0))
+    branch_0 = len(instrset)
+    if goose_div not in (None, 0):
+        # goosing
+        ontime_per_goose= (goose_div//base_div) - 1 
+        # goosing shot is first, then # of ontime shots per goose
+        instrset.append(ControlRequest([1, 2])) # goose + all
+        instrset.append(ACRateSync(timeslotm=timeslot_mask, marker=fiducial_marker, occ=base_div))
+        for i in range(ontime_per_goose):
+            instrset.append(ControlRequest([0, 2])) # on_time +all
+            instrset.append(ACRateSync(timeslotm=timeslot_mask, marker=fiducial_marker, occ=base_div))
+        instrset.append(Branch.unconditional(line=branch_0))
+    else:
+        # no goose, only on_time shots
+        instrset.append(ControlRequest([0,2])) #on_time + all
+        instrset.append(ACRateSync(timeslotm=timeslot_mask, marker=fiducial_marker, occ=base_div))
+        instrset.append(Branch.unconditional(line=branch_0))
+
+    if debug:
+        for instr in instrset:
+            print(instr.print_())
+        
+    return instrset
+
+
+def make_base_sequence(offset=None, firstSyncAC=False):
+    """
+    Setup base rate sequences always needed to operate the laser system.
+
+    Rates: AC Rate 71,428, 35,714, 102, 5.1 Hz
+            70k, 35k, 100, 5 (TPG seconds)
+
+    Notes
+    ----
+
+    The AC power line is sampled at 2/14Mhz = 35,714 Hz 
+    to guaranteed all AC crossings coincide every two 71428 Hz markers.
+
+    During testing it was observed the ACRateSync was observed to have an
+    offset of 7 910kH markers from the corresponding 70kH fixedRateSync.
+
+    This offset might change from 7, so the offset selection is kept even for AC rates
+
+    """
+    # initialize instruction set array
+    instrset = []
+
+    if offset is None:
+        offset = 0
+
+    if firstSyncAC:
+        timeslot_mask = (1<<0) | (1<<3)
+        fiducial_marker = acRateHzToMarker["60Hz"] 
+        instrset.append(ACRateSync(timeslotm=timeslot_mask, marker=fiducial_marker, occ=1))
+        # needed so first offset_request() starts at a 70H marker
+        instrset.append(FixedRateSync(marker="70kH", occ=2))
+
+    branch_0 = len(instrset)
+    _add_offset_request(instrset, [0, 1, 2, 3], offset) # 70kH + 35kH + 100H + 5H
+    instrset.append(FixedRateSync(marker="70kH", occ=1))
+    branch_1 = len(instrset)
+    _add_inner_sequence(instrset, offset=offset)
+
+    ## Loop 2: 100H markers per 5H marker
+    spacing_100 = 700
+    spacing_5 = 14000
+    loop_count = spacing_5 // spacing_100 - 2
+    instrset.append(Branch.conditional(line=branch_1, counter=1, value=loop_count))
+    # again last iteration has to be done manually
+    _add_inner_sequence(instrset, offset=offset, final=True)
+
+    instrset.append(Branch.unconditional(line=branch_0))
 
     return instrset
 
+def _add_offset_request(instrset: list, request, offset) -> list:
+    """ helper function adds control requests with appropriate offset"""
+    if offset != 0:
+        instrset.append(FixedRateSync(marker="910kH", occ=offset))
+    instrset.append(ControlRequest(request))
+
+
+def _add_inner_sequence(instrset: list, offset=None, final=False):
+    """
+    To make the nc sequence a little more readable, 
+    a repeated section is broken out here
+
+    Loop 1:
+    75kH + 35kH markers per 100H marker 
+    
+    final = true, do not add 100H last marker
+    """
+    # define all spacings in terms of smallest marker
+    # spacing_70k = 1
+    spacing_35k = 2
+    spacing_100 = 700
+
+    loop_count = spacing_100//spacing_35k - 2 
+    branch = len(instrset)
+    _add_offset_request(instrset, [0], offset) #70kH
+    instrset.append(FixedRateSync(marker="70kH", occ=1))
+    _add_offset_request(instrset, [0, 1], offset) #70kH + 35KH
+    instrset.append(FixedRateSync(marker="70kH", occ=1))
+    instrset.append(Branch.conditional(line=branch, counter=0, value=loop_count))
+    # last iteration done manually since last iteration is different
+    _add_offset_request(instrset, [0], offset) #70kH
+    instrset.append(FixedRateSync(marker="70kH", occ=1))
+    if not final:
+        _add_offset_request(instrset, [0, 1, 2], offset) #70kH + 35KH + 100H
+        instrset.append(FixedRateSync(marker="70kH", occ=1))
+    return instrset
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -159,7 +272,7 @@ if __name__ == "__main__":
     engines = {2: 6, 3: 7}  # Bay --> sequence engine mapping
 
     # Dict will eventually be applied to drop down menu
-    base_list = make_base_rates(carbide_factors)
+    base_list = make_base_rates(sc_factors)
 
     if base_rate not in base_list:
         raise ValueError(
@@ -179,7 +292,7 @@ if __name__ == "__main__":
     seqdesc = {0: f"Bay {bay} On Time", 1: f"Bay {bay} Off Time", 2: "", 3: ""}
     base_div = 910000//int(base_rate)
     goose_div = 910000//int(goose_rate)
-    inst = make_sequence(base_div, goose_div, offset, True)
+    inst = make_sequence_sc(base_div, goose_div, offset, True)
 
     xpm_pv = "DAQ:NEH:XPM:0"
     seqcodes_pv = Pv(f'{xpm_pv}:SEQCODES', isStruct=True)
