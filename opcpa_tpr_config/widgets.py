@@ -15,7 +15,7 @@ from qtpy import QtWidgets
 from xpm_prog import (allowed_goose_rates, sc_factors, nc_factors,
                 make_possible_rates,
                 make_base_sequence, make_sequence_sc,
-                make_sequence_nc
+                make_sequence_nc, validate_goose_len
                 )
 
 logger = logging.getLogger(__name__)
@@ -170,8 +170,14 @@ class LaserConfigDisplay(Display):
     total_rate_label: QtWidgets.QLabel
     goose_rate_box: QtWidgets.QComboBox
     goose_rate_label: QtWidgets.QLabel
+    goose_effective_rate_label: QtWidgets.QLabel
     goose_arrival_box: QtWidgets.QComboBox
     goose_arrival_label: QtWidgets.QLabel
+    goose_start_label: QtWidgets.QLabel
+    goose_start_input: QtWidgets.QLineEdit
+    goose_len_label: QtWidgets.QLabel
+    goose_len_input: QtWidgets.QLineEdit
+
 
     apply_button: pydm_widgets.PyDMPushButton
     status_label: QtWidgets.QLabel
@@ -231,6 +237,9 @@ class LaserConfigDisplay(Display):
         self.sc_bucket_control_box.currentTextChanged.connect(
             self.update_bucket_control_vis
         )
+
+        self.goose_len_input.editingFinished.connect(self._validate_goose_len)
+
 
     def update_pvs(self):
         """
@@ -308,8 +317,10 @@ class LaserConfigDisplay(Display):
     def update_base_rates(self, is_superconducting):
         if is_superconducting:
             factors = sc_factors
+            self._clock_rate = 910000
         else:
             factors = nc_factors
+            self._clock_rate = 120
         
         self._base_rates = make_possible_rates(factors)
         # Restrict allowed rates to > 1kHz for sc and >5hz for NC, but keep all rates in
@@ -346,6 +357,10 @@ class LaserConfigDisplay(Display):
         """
         self.goose_rate_box.setVisible(self.goose_enabled)
         self.goose_rate_label.setVisible(self.goose_enabled)
+        self.goose_len_label.setVisible(self.goose_enabled)
+        self.goose_len_input.setVisible(self.goose_enabled)
+        self.goose_start_label.setVisible(self.goose_enabled)
+        self.goose_start_input.setVisible(self.goose_enabled)
 
     def update_goose_rates(self):
         if self._base_rates is not None and self.base_rate is not None:
@@ -354,6 +369,8 @@ class LaserConfigDisplay(Display):
                 self._base_rates
             )
             self.goose_rate_box.clear()
+            self.goose_len_input.setText("1")
+            self.goose_start_input.setText("1")
             for rate in goose_rates:
                 self.goose_rate_box.addItem(str(rate))
             if self._debug:
@@ -417,6 +434,19 @@ class LaserConfigDisplay(Display):
     @property
     def nc_manual_bucket(self):
         return int(self.nc_bucket_edit.text())
+
+    def _validate_goose_len(self):
+        """Clamp goose_len_input to valid range via validate_goose_len."""
+        if self.base_rate is None or not self.goose_enabled:
+            return
+        try:
+            goose_len = int(self.goose_len_input.text())
+        except ValueError:
+            goose_len = 1
+        base_div = self._clock_rate // self.base_rate
+        goose_div = self._clock_rate // self.goose_rate
+        valid = validate_goose_len(base_div, goose_div, goose_len)
+        self.goose_len_input.setText(str(valid))
 
 
 class ExpertDisplay(Display):
@@ -651,9 +681,11 @@ class UserConfigDisplay(Display):
             raise ValueError(f"Could not read config file {config}")
 
         if self._config is not None:
-            self._db = happi.Client(
-                path=self._config['main']['laser_database']
-            )
+            db_path = self._config.get('main', {}).get('laser_database')
+            if db_path is None:
+                self._db = None
+            else:
+                self._db = happi.Client(path=db_path)
 
         self._engine1 = int(self._config['main']['engine1'])
         self._engine2 = int(self._config['main']['engine2'])
@@ -728,15 +760,6 @@ class UserConfigDisplay(Display):
         self._debug = bool(value)
 
     @property
-    def db(self):
-        if self.config is not None:
-            self._db = happi.Client(
-                path=self._config['main']['laser_database']
-            )
-            return self._db
-        return None
-
-    @property
     def expert_mode(self):
         return self.expert_checkbox.isChecked()
     
@@ -780,6 +803,9 @@ class UserConfigDisplay(Display):
         sig.put(t)
 
     def apply_device_config(self):
+        if self._db is None:
+            #no devices need configuration
+            return
         supported_devices = [
             "pcdsdevices.tpr.TprTrigger",
             "ophyd.signal.EpicsSignal",
@@ -907,6 +933,8 @@ class UserConfigDisplay(Display):
         prevents the TIC measurement from getting messed up during
         configuration.
         """
+        if self._db is None:
+            return
         if enable:
             conf = {'enable_trg_cmd': 'Enabled', 'enable_ch_cmd': 'Enabled'}
         else:
