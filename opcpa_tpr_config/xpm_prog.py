@@ -94,7 +94,7 @@ def make_sequence_sc(base_div, goose_div=None, goose_len=1, goose_start=1, offse
 
     return instrset
 
-def make_sequence_nc(base_div, goose_div=None, goose_len=1, goose_start=1, debug=False):
+def make_sequence_nc(base_div, start_ts1=True, goose_div=None, goose_len=1, goose_start=1, debug=False):
     """
     Generate an AC sequence at spacing of base_div times the base (120hz) rate for
     NC operation. 
@@ -135,8 +135,11 @@ def make_sequence_nc(base_div, goose_div=None, goose_len=1, goose_start=1, debug
     
     fiducial_marker = acRateHzToMarker["60Hz"] 
    
-    # always first sync to TS1 (might be handled in firmware, but leaving in just in case)
-    timeslot_mask = (1<<0) 
+    # first sync to starting timeslot
+    if start_ts1:
+        timeslot_mask = (1<<0)
+    else:
+        timeslot_mask = (1<<3)
     instrset.append(ACRateSync(timeslotm=timeslot_mask, marker=fiducial_marker, occ=1))
     logger.debug(f"ACRateSync(timeslotm={timeslot_mask}, marker={fiducial_marker}, occ=1)")
 
@@ -282,6 +285,95 @@ def _add_inner_sequence(instrset: list, offset=None, final=False):
     return instrset
 
 
+def write_xpm_config(xpm_pv: str, engine: int, seqdesc: dict, instrset: list) -> None:
+    """Write an XPM sequence configuration to the specified engine."""
+    seqcodes_pv = Pv(f'{xpm_pv}:SEQCODES', isStruct=True)
+    seqcodes = seqcodes_pv.get()
+    desc = seqcodes.value.Description
+
+    seq = SeqUser(f'{xpm_pv}:SEQENG:{engine}')
+    seq.execute('title', instrset, None, sync=True, refresh=False)
+
+    engineMask = 1 << engine
+
+    for e in range(4 * engine, 4 * engine + 4):
+        desc[e] = ''
+    for e, d in seqdesc.items():
+        desc[4 * engine + e] = d
+
+    tmo = 5.0  # EPICS PVA timeout
+
+    v = seqcodes.value
+    v.Description = desc
+    seqcodes.value = v
+    seqcodes_pv.put(seqcodes, wait=tmo)
+
+    pvSeqReset = Pv(f'{xpm_pv}:SeqReset')
+    pvSeqReset.put(engineMask, wait=tmo)
+
+
+def build_laser_sequence(
+    is_sc: bool,
+    base_rate: int,
+    goose_rate: int | None,
+    goose_enabled: bool,
+    offset: int,
+    start_ts1: bool = True,
+    goose_len: int = 1,
+    goose_start: int = 1,
+    bay: str = "",
+) -> tuple[dict, list]:
+    """Build the laser on/off time sequence and description."""
+    fiducials_per_period = 910000 if is_sc else 120
+    base_div = fiducials_per_period // base_rate
+
+    if goose_enabled and goose_rate is not None:
+        goose_div = fiducials_per_period // goose_rate
+    else:
+        goose_div = None
+
+    logger.info(f"Building laser sequence: base_rate={base_rate}, goose_rate={goose_rate}")
+    logger.debug(f"base_div={base_div}, goose_div={goose_div}, offset={offset}")
+
+    if is_sc:
+        instrset = make_sequence_sc(
+            base_div, goose_div=goose_div, goose_len=goose_len,
+            goose_start=goose_start, offset=offset,
+        )
+    else:
+        instrset = make_sequence_nc(
+            base_div, start_ts1=start_ts1, goose_div=goose_div,
+            goose_len=goose_len, goose_start=goose_start,
+        )
+
+    seqdesc = {
+        0: f"{bay} On time shots",
+        1: f"{bay} Goose shots",
+        2: f"{bay} All laser shots",
+        3: "",
+    }
+    return seqdesc, instrset
+
+
+def build_base_sequence(
+    is_sc: bool,
+    offset: int,
+    bay: str = "",
+) -> tuple[dict, list]:
+    """Build the base rate sequence and description."""
+    logger.info(f"Building base sequence: offset={offset}")
+
+    instrset = make_base_sequence(offset, firstSyncAC=(not is_sc))
+
+    seqdesc = {
+        0: f"{bay} 71.4kHz",
+        1: f"{bay} 35.7kHz",
+        2: f"{bay} 102Hz",
+        3: f"{bay} 5Hz",
+    }
+    return seqdesc, instrset
+
+
 def program_xpm(bay: int, engine: int, laser_rate: int, goose_rate: int, offset: int, xpm_pv="DAQ:DEH:XMP:0") -> None:
     """Build and program the XPM sequence for a given bay/engine."""
     base_list = make_possible_rates(sc_factors)
@@ -303,34 +395,11 @@ def program_xpm(bay: int, engine: int, laser_rate: int, goose_rate: int, offset:
     seqdesc = {0: f"Bay {bay} On Time", 1: f"Bay {bay} Off Time", 2: "", 3: ""}
     base_div = 910000 // int(laser_rate)
     goose_div = 910000 // int(goose_rate)
-    inst = make_sequence_sc(base_div, goose_div, offset, True)
+    inst = make_sequence_sc(base_div, goose_div=goose_div, offset=offset)
 
     logger.info(f"Programming XPM: bay={bay} engine={engine} laser_rate={laser_rate} goose_rate={goose_rate} offset={offset}")
 
-    seqcodes_pv = Pv(f'{xpm_pv}:SEQCODES', isStruct=True)
-    seqcodes = seqcodes_pv.get()
-    desc = seqcodes.value.Description
-
-    seq = SeqUser(f'{xpm_pv}:SEQENG:{engine}')
-    seq.execute('title', inst, None, sync=True, refresh=False)
-
-    engineMask = 0
-    engineMask |= (1 << engine)
-
-    for e in range(4 * engine, 4 * engine + 4):
-        desc[e] = ''
-    for e, d in seqdesc.items():
-        desc[4 * engine + e] = d
-
-    tmo = 5.0  # epics pva timeout
-
-    v = seqcodes.value
-    v.Description = desc
-    seqcodes.value = v
-    seqcodes_pv.put(seqcodes, wait=tmo)
-
-    pvSeqReset = Pv(f'{xpm_pv}:SeqReset')
-    pvSeqReset.put(engineMask, wait=tmo)
+    write_xpm_config(xpm_pv, engine, seqdesc, inst)
     logger.info("XPM programming complete")
 
 

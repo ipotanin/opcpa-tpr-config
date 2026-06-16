@@ -7,15 +7,13 @@ from os import path
 import happi
 import yaml
 from ophyd import EpicsSignal
-from psdaq.cas.pvedit import Pv
-from psdaq.seq.seqprogram import SeqUser
 from pydm import Display
 from pydm import widgets as pydm_widgets
 from qtpy import QtWidgets
 from xpm_prog import (allowed_goose_rates, sc_factors, nc_factors,
-                make_possible_rates,
-                make_base_sequence, make_sequence_sc,
-                make_sequence_nc, validate_goose_len
+                make_possible_rates, validate_goose_len,
+                build_laser_sequence, build_base_sequence,
+                write_xpm_config,
                 )
 
 logger = logging.getLogger(__name__)
@@ -665,12 +663,6 @@ class UserConfigDisplay(Display):
 
         self._engine1 = int(self._config['main']['engine1'])
         self._engine2 = int(self._config['main']['engine2'])
-        xpm_pv = self._config['main']['xpm_pv']
-
-        # Sequence engine for on/off time codes
-        self._LasSeq = SeqUser(f"{xpm_pv}:SEQENG:{self._engine1}")
-        # Sequence engine for base laser rate and diagnostic codes
-        self._BaseSeq = SeqUser(f"{xpm_pv}:SEQENG:{self._engine2}")
 
         self.screen_title.setText(self._config['main']['title'])
 
@@ -817,33 +809,35 @@ class UserConfigDisplay(Display):
         Generate and apply the XPM configuration for the laser on/off time
         event codes.
         """
+        try:
+            goose_len = int(self.laser_config_widget.goose_len_input.text())
+        except ValueError:
+            goose_len = 1
+        try:
+            goose_start = int(self.laser_config_widget.goose_start_input.text())
+        except ValueError:
+            goose_start = 1
 
-        fiducials_per_period = 910000 if self.is_superconducting else 120        
+        goose_rate = (
+            self.laser_config_widget.goose_rate
+            if self.laser_config_widget.goose_enabled
+            else None
+        )
 
-        base_div = fiducials_per_period//self.laser_config_widget.base_rate
-        if self.laser_config_widget.goose_enabled:
-            goose_div = fiducials_per_period//self.laser_config_widget.goose_rate
-        else:
-            goose_div = None
+        seqdesc, instrset = build_laser_sequence(
+            is_sc=self.is_superconducting,
+            base_rate=self.laser_config_widget.base_rate,
+            goose_rate=goose_rate,
+            goose_enabled=self.laser_config_widget.goose_enabled,
+            offset=self.offset,
+            start_ts1=self.laser_config_widget.start_ts1,
+            goose_len=goose_len,
+            goose_start=goose_start,
+            bay=self._config['main']['bay'],
+        )
 
-        logger.info("Applying laser rates")
-        logger.info(f"Base rate: {self.laser_config_widget.base_rate}")
-        logger.info(f"Goose rate: {self.laser_config_widget.goose_rate}")
-        logger.debug(f"Goose arrival: {self.laser_config_widget.arrival_config}")
-        logger.debug(f"Base div: {base_div}")
-        logger.debug(f"Goose div: {goose_div}")
-        logger.info(f"Offset: {self.offset}")
-
-        if self.is_superconducting:
-            instrset = make_sequence_sc(base_div, goose_div, self.offset)
-        else:
-            instrset = make_sequence_nc(base_div, self.laser_config_widget.start_ts1, goose_div) 
-
-        bay = self._config['main']['bay']
-        seqdesc = {0: f"{bay} On time shots", 1: f"{bay} Goose shots",
-                   2: f"{bay} All laser shots", 3: ""}
-
-        self.write_xpm_config(seqdesc, instrset, self._LasSeq, self._engine1)
+        xpm_pv = self._config['main']['xpm_pv']
+        write_xpm_config(xpm_pv, self._engine1, seqdesc, instrset)
 
     def apply_base_rates(self):
         """
@@ -853,43 +847,14 @@ class UserConfigDisplay(Display):
         logger.info("Applying base rates")
         logger.info(f"Offset: {self.offset}")
 
-        bay = self._config['main']['bay']
-        seqdesc = {0: f"{bay} 71.4kHz", 1: f"{bay} 35.7kHz", 2: f"{bay} 102Hz",
-                3: f"{bay} 5Hz"}
-
-        instrset = make_base_sequence(self.offset, firstSyncAC=(not self.is_superconducting))
-
-        self.write_xpm_config(seqdesc, instrset, self._BaseSeq, self._engine2)
-
-    def write_xpm_config(self, seqdesc, instrset, sequser, nengine):
-        """
-        Function to write a given XPM configuration to the specified engine.
-        """
-        seqcodes_pv = Pv(
-            f"{self._config['main']['xpm_pv']}:SEQCODES", isStruct=True
+        seqdesc, instrset = build_base_sequence(
+            is_sc=self.is_superconducting,
+            offset=self.offset,
+            bay=self._config['main']['bay'],
         )
-        seqcodes = seqcodes_pv.get()
-        desc = seqcodes.value.Description
 
-        sequser.execute('title', instrset, None, sync=True, refresh=False)
-
-        engineMask = 0
-        engineMask |= (1 << nengine)
-
-        for e in range(4*nengine, 4*nengine+4):
-            desc[e] = ''
-        for e, d in seqdesc.items():
-            desc[4*nengine+e] = d
-
-        tmo = 5.0  # EPICS PVA timeout
-
-        v = seqcodes.value
-        v.Description = desc
-        seqcodes.value = v
-        seqcodes_pv.put(seqcodes, wait=tmo)
-
-        pvSeqReset = Pv(f"{self._config['main']['xpm_pv']}:SeqReset")
-        pvSeqReset.put(engineMask, wait=tmo)
+        xpm_pv = self._config['main']['xpm_pv']
+        write_xpm_config(xpm_pv, self._engine2, seqdesc, instrset)
 
     def set_tic_enable(self, enable):
         """
