@@ -20,7 +20,6 @@ from xpm_prog import (allowed_goose_rates, sc_factors, nc_factors,
 
 logger = logging.getLogger(__name__)
 
-
 def read_config(config_file):
     """
     Read in the config file for the screen.
@@ -40,22 +39,18 @@ class NCMetadataDisplay(Display):
     ):
         super().__init__(parent, **kwargs)
 
-    def setup_display(self, config, debug):
+    def setup_display(self, config):
         """
         Run the things we would run during init but can't because I can't
         figure out how to pass variables to sub-displays at init....
         """
-        self._debug = debug
-
         self._config = read_config(config)
         if self._config is None:
             raise ValueError(f"Could not read config file {config}")
 
-        if self._debug:
-            print(f"Read configuration file: {config}")
-            cfg_keys = self._config.keys()
-            print(f"Configuration sections: {cfg_keys}")
-            print(self._config)
+        logger.info(f"Read configuration file: {config}")
+        logger.debug(f"Configuration sections: {self._config.keys()}")
+        logger.debug(f"{self._config}")
 
         self.update_pvs()
 
@@ -66,8 +61,7 @@ class NCMetadataDisplay(Display):
         #  metadata
         nc_base = self._config['main']['nc_meta_pv']
 
-        if self._debug:
-            print(f"SC metadata base PV: {nc_base}")
+        logger.debug(f"NC metadata base PV: {nc_base}")
 
         # TODO: find relevant NC metadata PVs to display
 
@@ -93,22 +87,18 @@ class SCMetadataDisplay(Display):
     ):
         super().__init__(parent, **kwargs)
 
-    def setup_display(self, config, debug):
+    def setup_display(self, config):
         """
         Run the things we would run during init but can't because I can't
         figure out how to pass variables to sub-displays at init....
         """
-        self._debug = debug
-
         self._config = read_config(config)
         if self._config is None:
             raise ValueError(f"Could not read config file {config}")
 
-        if self._debug:
-            print(f"Read configuration file: {config}")
-            cfg_keys = self._config.keys()
-            print(f"Configuration sections: {cfg_keys}")
-            print(self._config)
+        logger.info(f"Read configuration file: {config}")
+        logger.debug(f"Configuration sections: {self._config.keys()}")
+        logger.debug(f"{self._config}")
 
         self.update_pvs()
 
@@ -119,8 +109,7 @@ class SCMetadataDisplay(Display):
         # SC metadata
         sc_base = self._config['main']['sc_meta_pv']
 
-        if self._debug:
-            print(f"SC metadata base PV: {sc_base}")
+        logger.debug(f"SC metadata base PV: {sc_base}"))
 
         self.pattern_name_rbv.set_channel(f"ca://{sc_base}:NAME")
         self.rate_rbv.set_channel(f"ca://{sc_base}:RATE_RBV")
@@ -189,13 +178,11 @@ class LaserConfigDisplay(Display):
     ):
         super().__init__(parent, **kwargs)
 
-    def setup_display(self, config, debug):
+    def setup_display(self, config):
         """
         Run the things we would run during init but can't because I can't
         figure out how to pass variables to sub-displays at init....
         """
-        self._debug = debug
-
         self._config = read_config(config)
         if self._config is None:
             raise ValueError(f"Could not read config file {config}")
@@ -204,11 +191,9 @@ class LaserConfigDisplay(Display):
         self._engine1 = int(self._config['main']['engine1'])
         self._engine2 = int(self._config['main']['engine2'])
 
-        if self._debug:
-            print(f"Read configuration file: {config}")
-            cfg_keys = self._config.keys()
-            print(f"Configuration sections: {cfg_keys}")
-            print(self._config)
+        logger.info(f"Read configuration file: {config}")
+        logger.debug(f"Configuration sections: {self._config.keys()}")
+        logger.debug(f"{self._config}")
 
         self.status_label.setText("Status: Idle")
         # Hiding this because the status doesn't work well without threading
@@ -298,13 +283,12 @@ class LaserConfigDisplay(Display):
         }
         ]'''
 
-        if self._debug:
-            print(f"Engine 1: {self._engine1}")
-            print(f"Engine 2: {self._engine2}")
-            print(f"On time EC: {self._on_time}")
-            print(f"Off time EC: {self._off_time}")
-            print(f"On time index: {on_time_idx}")
-            print(f"Off time index: {off_time_idx}")
+        logger.debug(f"Engine 1: {self._engine1}")
+        logger.debug(f"Engine 2: {self._engine2}")
+        logger.debug(f"On time EC: {self._on_time}")
+        logger.debug(f"Off time EC: {self._off_time}")
+        logger.debug(f"On time index: {on_time_idx}")
+        logger.debug(f"Off time index: {off_time_idx}")
 
     def ui_filename(self):
         return "rep_rate_config.ui"
@@ -339,8 +323,7 @@ class LaserConfigDisplay(Display):
         # always select the highest rate when switching menus
         self.total_rate_box.setCurrentIndex(self.total_rate_box.count() - 1)
 
-        if self._debug:
-            print(f"Allowed base rates: {self._base_rates}")
+        logger.debug(f"Allowed base rates: {self._base_rates}")
 
     @property
     def base_rate(self):
@@ -373,9 +356,8 @@ class LaserConfigDisplay(Display):
             self.goose_start_input.setText("1")
             for rate in goose_rates:
                 self.goose_rate_box.addItem(str(rate))
-            if self._debug:
-                print(f"Requested base rate: {rate}")
-                print(f"Allowed goose rates: {goose_rates}")
+            logger.debug(f"Requested base rate: {rate}")
+            logger.debug(f"Allowed goose rates: {goose_rates}")
 
     @property
     def goose_rate(self):
@@ -384,8 +366,7 @@ class LaserConfigDisplay(Display):
     def update_goose_arrival(self):
         cfgs = self._config['goose_arrival_configs']
         if cfgs is not None:
-            if self._debug:
-                print(f"Goose arrival configs: {cfgs}")
+            logger.debug(f"Goose arrival configs: {cfgs}")
             for name, cfg in cfgs.items():
                 text = cfg['desc']
                 cfg.pop('desc', None)
@@ -472,9 +453,7 @@ class ExpertDisplay(Display):
             path.dirname(path.realpath(__file__)), self.ui_filename()
         )
 
-    def setup_display(self, config, debug):
-
-        self._debug = debug
+    def setup_display(self, config):
 
         self._config = read_config(config)
         if self._config is None:
@@ -661,20 +640,17 @@ class UserConfigDisplay(Display):
         self,
         parent=None,
         config: str = "",
-        debug: bool = False,
         **kwargs
     ):
         super().__init__(parent, **kwargs)
 
-        self.laser_config_widget.setup_display(config, debug)
+        self.laser_config_widget.setup_display(config)
 
-        self.sc_metadata_widget.setup_display(config, debug)
+        self.sc_metadata_widget.setup_display(config)
 
-        self.nc_metadata_widget.setup_display(config, debug)
+        self.nc_metadata_widget.setup_display(config)
 
-        self.expert_display_widget.setup_display(config, debug)
-
-        self._debug = debug
+        self.expert_display_widget.setup_display(config)
 
         self._config = read_config(config)
         if self._config is None:
@@ -752,14 +728,6 @@ class UserConfigDisplay(Display):
         
 
     @property
-    def debug(self):
-        return self._debug
-
-    @debug.setter
-    def debug(self, value):
-        self._debug = bool(value)
-
-    @property
     def expert_mode(self):
         return self.expert_checkbox.isChecked()
     
@@ -826,14 +794,12 @@ class UserConfigDisplay(Display):
                     if devclass == "ophyd.signal.EpicsSignal":
                         if 'val' in config.keys():
                             instance.put(config['val'])
-                            if self._debug:
-                                print(f"Put {device} {config['val']}")
+                            logger.info(f"Put {device} {config['val']}")
                         else:
                             raise Exception("Missing 'val' for EpicsSignal")
                     else:
                         instance.configure(config)
-                        if self._debug:
-                            print(f"Configure {device} {config}")
+                        logger.info(f"Configure {device} {config}")
 
     def calc_tic_averaging(self, total_rate):
         """
@@ -860,17 +826,16 @@ class UserConfigDisplay(Display):
         else:
             goose_div = None
 
-        if self._debug:
-            print("Applying laser rates")
-            print(f"Base rate: {self.laser_config_widget.base_rate}")
-            print(f"Goose rate: {self.laser_config_widget.goose_rate}")
-            print(f"Goose arrival: {self.laser_config_widget.arrival_config}")
-            print(f"Base div: {base_div}")
-            print(f"Goose div: {goose_div}")
-            print(f"Offset: {self.offset}")
+        logger.info("Applying laser rates")
+        logger.info(f"Base rate: {self.laser_config_widget.base_rate}")
+        logger.info(f"Goose rate: {self.laser_config_widget.goose_rate}")
+        logger.debug(f"Goose arrival: {self.laser_config_widget.arrival_config}")
+        logger.debug(f"Base div: {base_div}")
+        logger.debug(f"Goose div: {goose_div}")
+        logger.info(f"Offset: {self.offset}")
 
         if self.is_superconducting:
-            instrset = make_sequence_sc(base_div, goose_div, self.offset, self._debug)
+            instrset = make_sequence_sc(base_div, goose_div, self.offset)
         else:
             instrset = make_sequence_nc(base_div, self.laser_config_widget.start_ts1, goose_div) 
 
@@ -885,9 +850,8 @@ class UserConfigDisplay(Display):
         Generate and apply the XPM configuration for the "base" laser rates
         that should always be available.
         """
-        if self._debug:
-            print("Applying base rates")
-            print(f"Offset: {self.offset}")
+        logger.info("Applying base rates")
+        logger.info(f"Offset: {self.offset}")
 
         bay = self._config['main']['bay']
         seqdesc = {0: f"{bay} 71.4kHz", 1: f"{bay} 35.7kHz", 2: f"{bay} 102Hz",
