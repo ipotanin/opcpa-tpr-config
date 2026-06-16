@@ -1,7 +1,10 @@
 import argparse
 import itertools
+import logging
 
 import numpy as np
+
+logger = logging.getLogger(__name__)
 from psdaq.cas.pvedit import Pv
 from psdaq.seq.seq import Branch, ControlRequest, FixedRateSync, ACRateSync, acRateHzToMarker
 from psdaq.seq.seqprogram import SeqUser
@@ -39,52 +42,51 @@ def allowed_goose_rates(base_rate, rate_list):
 
 
 # Selected base rate + goose rate --> pulse sequence
-def make_sequence_sc(base_div, goose_div=None, offset=None, debug=False):
+def make_sequence_sc(base_div, goose_div=None, goose_len=1, goose_start=1, offset=None, debug=False):
     # Do some setup
     instrset = []
 
     # Insert bucket offset if it is present
     if offset is not None and offset != 0:
         instrset.append(FixedRateSync(marker="910kH", occ=offset))
-        if debug:
-            print(f"FixedRateSync(marker=\"910kH\", occ={offset})")
+        logger.debug(f"FixedRateSync(marker='910kH', occ={offset})")
 
-    # If we're goosing, put that pulse in _first_ because it makes delay
-    # management easier
-    if goose_div not in (None, 0):  # Start with goose
-        instrset.append(ControlRequest([1, 2]))
-        instrset.append(FixedRateSync(marker="910kH", occ=base_div))
-        if debug:
-            print("ControlRequest([1, 2])")
-            print(f"FixedRateSync(marker=\"910kH\", occ={base_div})")
+    #initial goose start offset
+    if goose_start > 1:
+        occ = base_div * (goose_len - 1)
+        instrset.append(FixedRateSync(marker="910kH", occ=occ))
+        logger.debug(f"FixedRateSync(marker='910kH', occ={occ})")
 
-    # Loop over base:goose rate ratio once. Because we're using divisors,
-    # we divide goose divider by base divider, rather than base rate by
-    # goose rate.
-    if goose_div in (None, 0):
-        n = 1
+    branch_0 = len(instrset)
+    if goose_div not in (None, 0):
+        # calculate ontime per goose
+        ontime_per_goose= (goose_div//base_div) - goose_len 
+         
+        # goosing shots are first, then # of ontime shots per goose
+        for i in range(goose_len):
+            instrset.append(ControlRequest([1, 2])) # goose + all
+            logger.debug("ControlRequest([1, 2])  # goose + all")
+            instrset.append(FixedRateSync(marker="910kH", occ=base_div))
+            logger.debug(f"FixedRateSync(marker='910kH', occ={base_div})")
+        for i in range(ontime_per_goose):
+            instrset.append(ControlRequest([0, 2])) # on_time + all
+            logger.debug("ControlRequest([0, 2])  # on_time + all")
+            instrset.append(FixedRateSync(marker="910kH", occ=base_div))
+            logger.debug(f"FixedRateSync(marker='910kH', occ={base_div})")
     else:
-        n = (goose_div//base_div) - 1
-    for i in range(n):
-        instrset.append(ControlRequest([0, 2]))
+        # no goose, only on_time shots
+        instrset.append(ControlRequest([0,2])) #on_time + all
+        logger.debug("ControlRequest([0, 2])  # on_time + all")
         instrset.append(FixedRateSync(marker="910kH", occ=base_div))
-        if debug:
-            print("ControlRequest([0, 2])")
-            print(f"FixedRateSync(marker=\"910kH\", occ={base_div})")
+        logger.debug(f"FixedRateSync(marker='910kH', occ={base_div})")
 
-    # Change branching based on offset
-    if offset is not None and offset != 0:
-        if debug:
-            print("Branch.unconditional(1)")
-        instrset.append(Branch.unconditional(1))
-    else:
-        if debug:
-            print("Branch.unconditional(0)")
-        instrset.append(Branch.unconditional(0))
+    # loop back to start
+    instrset.append(Branch.unconditional(line=branch_0))
+    logger.debug(f"Branch.unconditional(line={branch_0})")
 
     return instrset
 
-def make_sequence_nc(base_div, start_ts1 = True, goose_div=None, debug=False):
+def make_sequence_nc(base_div, goose_div=None, goose_len=1, goose_start=1, debug=False):
     """
     Generate an AC sequence at spacing of base_div times the base (120hz) rate for
     NC operation. 
@@ -123,37 +125,50 @@ def make_sequence_nc(base_div, start_ts1 = True, goose_div=None, debug=False):
     
     fiducial_marker = acRateHzToMarker["60Hz"] 
    
-    # sync the fist shot
-    if start_ts1:
-        timeslot_mask = (1<<0) 
-    else:
-        timeslot_mask = (1<<3)
+    # always first sync to TS1 (might be handled in firmware, but leaving in just in case)
+    timeslot_mask = (1<<0) 
     instrset.append(ACRateSync(timeslotm=timeslot_mask, marker=fiducial_marker, occ=1))
+    logger.debug(f"ACRateSync(timeslotm={timeslot_mask}, marker={fiducial_marker}, occ=1)")
 
     # Linac only fires on TS 1 and 4
     timeslot_mask = (1<<0) | (1<<3)
 
+    #initial offset for goose start
+    if goose_start > 1:
+        occ = base_div * (goose_start - 1)
+        instrset.append(ACRateSync(timeslotm=timeslot_mask, marker=fiducial_marker, occ=occ))
+        logger.debug(f"ACRateSync(timeslotm={timeslot_mask}, marker={fiducial_marker}, occ={occ})")
+ 
     branch_0 = len(instrset)
     if goose_div not in (None, 0):
-        # goosing
-        ontime_per_goose= (goose_div//base_div) - 1 
-        # goosing shot is first, then # of ontime shots per goose
-        instrset.append(ControlRequest([1, 2])) # goose + all
-        instrset.append(ACRateSync(timeslotm=timeslot_mask, marker=fiducial_marker, occ=base_div))
-        for i in range(ontime_per_goose):
-            instrset.append(ControlRequest([0, 2])) # on_time +all
+        # calculate ontime per goose
+        ontime_per_goose= (goose_div//base_div) - goose_len 
+         
+        # goosing shots are first, then # of ontime shots per goose
+        for i in range(goose_len):
+            instrset.append(ControlRequest([1, 2])) # goose + all
+            logger.debug("ControlRequest([1, 2])  # goose + all")
             instrset.append(ACRateSync(timeslotm=timeslot_mask, marker=fiducial_marker, occ=base_div))
-        instrset.append(Branch.unconditional(line=branch_0))
+            logger.debug(f"ACRateSync(timeslotm={timeslot_mask}, marker={fiducial_marker}, occ={base_div})")
+        for i in range(ontime_per_goose):
+            instrset.append(ControlRequest([0, 2])) # on_time + all
+            logger.debug("ControlRequest([0, 2])  # on_time + all")
+            instrset.append(ACRateSync(timeslotm=timeslot_mask, marker=fiducial_marker, occ=base_div))
+            logger.debug(f"ACRateSync(timeslotm={timeslot_mask}, marker={fiducial_marker}, occ={base_div})")
     else:
         # no goose, only on_time shots
         instrset.append(ControlRequest([0,2])) #on_time + all
+        logger.debug("ControlRequest([0, 2])  # on_time + all")
         instrset.append(ACRateSync(timeslotm=timeslot_mask, marker=fiducial_marker, occ=base_div))
-        instrset.append(Branch.unconditional(line=branch_0))
+        logger.debug(f"ACRateSync(timeslotm={timeslot_mask}, marker={fiducial_marker}, occ={base_div})")
 
-    if debug:
-        for instr in instrset:
-            print(instr.print_())
-        
+    # loop back to start
+    instrset.append(Branch.unconditional(line=branch_0))
+    logger.debug(f"Branch.unconditional(line={branch_0})")
+
+    for instr in instrset:
+        logger.debug(f"{instr.print_()}")
+
     return instrset
 
 
@@ -186,12 +201,15 @@ def make_base_sequence(offset=None, firstSyncAC=False):
         timeslot_mask = (1<<0) | (1<<3)
         fiducial_marker = acRateHzToMarker["60Hz"] 
         instrset.append(ACRateSync(timeslotm=timeslot_mask, marker=fiducial_marker, occ=1))
+        logger.debug(f"ACRateSync(timeslotm={timeslot_mask}, marker={fiducial_marker}, occ=1)")
         # needed so first offset_request() starts at a 70H marker
         instrset.append(FixedRateSync(marker="70kH", occ=2))
+        logger.debug("FixedRateSync(marker='70kH', occ=2)")
 
     branch_0 = len(instrset)
     _add_offset_request(instrset, [0, 1, 2, 3], offset) # 70kH + 35kH + 100H + 5H
     instrset.append(FixedRateSync(marker="70kH", occ=1))
+    logger.debug("FixedRateSync(marker='70kH', occ=1)")
     branch_1 = len(instrset)
     _add_inner_sequence(instrset, offset=offset)
 
@@ -200,10 +218,12 @@ def make_base_sequence(offset=None, firstSyncAC=False):
     spacing_5 = 14000
     loop_count = spacing_5 // spacing_100 - 2
     instrset.append(Branch.conditional(line=branch_1, counter=1, value=loop_count))
+    logger.debug(f"Branch.conditional(line={branch_1}, counter=1, value={loop_count})")
     # again last iteration has to be done manually
     _add_inner_sequence(instrset, offset=offset, final=True)
 
     instrset.append(Branch.unconditional(line=branch_0))
+    logger.debug(f"Branch.unconditional(line={branch_0})")
 
     return instrset
 
@@ -211,7 +231,9 @@ def _add_offset_request(instrset: list, request, offset) -> list:
     """ helper function adds control requests with appropriate offset"""
     if offset != 0:
         instrset.append(FixedRateSync(marker="910kH", occ=offset))
+        logger.debug(f"FixedRateSync(marker='910kH', occ={offset})")
     instrset.append(ControlRequest(request))
+    logger.debug(f"ControlRequest({request})")
 
 
 def _add_inner_sequence(instrset: list, offset=None, final=False):
@@ -233,83 +255,67 @@ def _add_inner_sequence(instrset: list, offset=None, final=False):
     branch = len(instrset)
     _add_offset_request(instrset, [0], offset) #70kH
     instrset.append(FixedRateSync(marker="70kH", occ=1))
+    logger.debug("FixedRateSync(marker='70kH', occ=1)")
     _add_offset_request(instrset, [0, 1], offset) #70kH + 35KH
     instrset.append(FixedRateSync(marker="70kH", occ=1))
+    logger.debug("FixedRateSync(marker='70kH', occ=1)")
     instrset.append(Branch.conditional(line=branch, counter=0, value=loop_count))
+    logger.debug(f"Branch.conditional(line={branch}, counter=0, value={loop_count})")
     # last iteration done manually since last iteration is different
     _add_offset_request(instrset, [0], offset) #70kH
     instrset.append(FixedRateSync(marker="70kH", occ=1))
+    logger.debug("FixedRateSync(marker='70kH', occ=1)")
     if not final:
         _add_offset_request(instrset, [0, 1, 2], offset) #70kH + 35KH + 100H
         instrset.append(FixedRateSync(marker="70kH", occ=1))
+        logger.debug("FixedRateSync(marker='70kH', occ=1)")
     return instrset
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
+def plot_sequence(instrset: list) -> None:
+    """Plot the pulse sequence. TODO: implement visualization."""
+    logger.info("Plotting not yet implemented")
 
-    parser.add_argument(
-        "base_rate",
-        help="Desired laser output rep rate (total)"
-    )
-    parser.add_argument(
-        "goose_rate",
-        help="Desired laser goose rate (sub-harmonic of base_rate)")
-    parser.add_argument("offset", help="Desired 910 kHz bucket offset")
-    parser.add_argument("bay", help="Laser bay to program for (2 or 3)")
 
-    args = parser.parse_args()
-
-    base_rate = int(args.base_rate)
-    goose_rate = int(args.goose_rate)
-    offset = int(args.offset)
-
-    allowed_bays = [2, 3]
-    if int(args.bay) not in allowed_bays:
-        raise ValueError(f"Bay {args.bay} not in {allowed_bays}!")
-    else:
-        bay = int(args.bay)
-
-    engines = {2: 6, 3: 7}  # Bay --> sequence engine mapping
-
-    # Dict will eventually be applied to drop down menu
+def program_xpm(bay: int, engine: int, base_rate: int, goose_rate: int, offset: int) -> None:
+    """Build and program the XPM sequence for a given bay/engine."""
     base_list = make_base_rates(sc_factors)
 
     if base_rate not in base_list:
         raise ValueError(
-           ("Base rate {base_rate} is not one of the available laser "
-            f"rates: {base_list}")
+            f"Base rate {base_rate} is not one of the available laser "
+            f"rates: {base_list}"
         )
 
-    # Dict will eventually be applied to drop down menu
     goose_list = allowed_goose_rates(base_rate, base_list)
 
     if goose_rate not in goose_list:
         raise ValueError(
-           (f"Goose rate {goose_rate} is not one of the available goose "
-            f"rates: {goose_list}")
+            f"Goose rate {goose_rate} is not one of the available goose "
+            f"rates: {goose_list}"
         )
 
     seqdesc = {0: f"Bay {bay} On Time", 1: f"Bay {bay} Off Time", 2: "", 3: ""}
-    base_div = 910000//int(base_rate)
-    goose_div = 910000//int(goose_rate)
+    base_div = 910000 // int(base_rate)
+    goose_div = 910000 // int(goose_rate)
     inst = make_sequence_sc(base_div, goose_div, offset, True)
+
+    logger.info(f"Programming XPM: bay={bay} engine={engine} base_rate={base_rate} goose_rate={goose_rate} offset={offset}")
 
     xpm_pv = "DAQ:NEH:XPM:0"
     seqcodes_pv = Pv(f'{xpm_pv}:SEQCODES', isStruct=True)
     seqcodes = seqcodes_pv.get()
     desc = seqcodes.value.Description
 
-    engine = int(engines[bay])
     seq = SeqUser(f'{xpm_pv}:SEQENG:{engine}')
     seq.execute('title', inst, None, sync=True, refresh=False)
 
     engineMask = 0
     engineMask |= (1 << engine)
 
-    for e in range(4*engine, 4*engine+4):
+    for e in range(4 * engine, 4 * engine + 4):
         desc[e] = ''
     for e, d in seqdesc.items():
-        desc[4*engine+e] = d
+        desc[4 * engine + e] = d
 
     tmo = 5.0  # epics pva timeout
 
@@ -320,3 +326,95 @@ if __name__ == "__main__":
 
     pvSeqReset = Pv(f'{xpm_pv}:SeqReset')
     pvSeqReset.put(engineMask, wait=tmo)
+    logger.info("XPM programming complete")
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="XPM sequence programmer")
+
+    parser.add_argument(
+        "base_rate", type=int,
+        help="Desired laser output rep rate (total)"
+    )
+    parser.add_argument(
+        "goose_rate", type=int,
+        help="Desired laser goose rate (sub-harmonic of base_rate)"
+    )
+    parser.add_argument(
+        "offset", type=int,
+        help="Desired 910 kHz bucket offset"
+    )
+    parser.add_argument(
+        "--bay", type=int, choices=[2, 3], default=None,
+        help="Laser bay to program (required unless --dry-run)"
+    )
+    parser.add_argument(
+        "--engine", type=int, default=None,
+        help="XPM sequence engine number (required unless --dry-run)"
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true", default=True,
+        help="Build sequence without programming hardware (default: True)"
+    )
+    parser.add_argument(
+        "--no-dry-run", dest="dry_run", action="store_false",
+        help="Actually program the XPM hardware"
+    )
+    parser.add_argument(
+        "--debug", action="store_true", default=True,
+        help="Enable debug-level log messages (default: True)"
+    )
+    parser.add_argument(
+        "--no-debug", dest="debug", action="store_false",
+        help="Disable debug-level log messages"
+    )
+    parser.add_argument(
+        "--plot", action="store_true", default=False,
+        help="Plot the generated pulse sequence"
+    )
+
+    args = parser.parse_args()
+
+    # Configure logging
+    log_level = logging.DEBUG if args.debug else logging.INFO
+    logging.basicConfig(
+        level=log_level,
+        format="%(asctime)s %(name)s [%(levelname)s] %(message)s",
+    )
+
+    # Validate bay/engine are provided when not dry-running
+    if not args.dry_run:
+        if args.bay is None or args.engine is None:
+            parser.error("--bay and --engine are required when not using --dry-run")
+
+    base_list = make_base_rates(sc_factors)
+
+    if args.base_rate not in base_list:
+        parser.error(
+            f"Base rate {args.base_rate} is not one of the available laser "
+            f"rates: {base_list}"
+        )
+
+    goose_list = allowed_goose_rates(args.base_rate, base_list)
+
+    if args.goose_rate not in goose_list:
+        parser.error(
+            f"Goose rate {args.goose_rate} is not one of the available goose "
+            f"rates: {goose_list}"
+        )
+
+    base_div = 910000 // args.base_rate
+    goose_div = 910000 // args.goose_rate
+    inst = make_sequence_sc(base_div, goose_div, args.offset, debug=args.debug)
+
+    logger.info(f"Generated sequence with {len(inst)} instructions")
+    for i, instr in enumerate(inst):
+        logger.debug(f"  [{i}] {instr}")
+
+    if args.plot:
+        plot_sequence(inst)
+
+    if args.dry_run:
+        logger.info("Dry run complete — no hardware programmed")
+    else:
+        program_xpm(args.bay, args.engine, args.base_rate, args.goose_rate, args.offset)
