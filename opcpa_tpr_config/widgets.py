@@ -109,7 +109,7 @@ class SCMetadataDisplay(Display):
         # SC metadata
         sc_base = self._config['main']['sc_meta_pv']
 
-        logger.debug(f"SC metadata base PV: {sc_base}"))
+        logger.debug(f"SC metadata base PV: {sc_base}")
 
         self.pattern_name_rbv.set_channel(f"ca://{sc_base}:NAME")
         self.rate_rbv.set_channel(f"ca://{sc_base}:RATE_RBV")
