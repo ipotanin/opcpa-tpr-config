@@ -13,7 +13,7 @@ from pydm import Display
 from pydm import widgets as pydm_widgets
 from qtpy import QtWidgets
 from xpm_prog import (allowed_goose_rates, sc_factors, nc_factors,
-                make_base_rates,
+                make_possible_rates,
                 make_base_sequence, make_sequence_sc,
                 make_sequence_nc
                 )
@@ -211,7 +211,7 @@ class LaserConfigDisplay(Display):
 
         self.update_pvs()
 
-        self._base_rates: list = make_base_rates(nc_factors)
+        self._base_rates: list = make_possible_rates(nc_factors)
         self.update_base_rates(False)
 
         self.update_goose_rates()
@@ -311,7 +311,7 @@ class LaserConfigDisplay(Display):
         else:
             factors = nc_factors
         
-        self._base_rates = make_base_rates(factors)
+        self._base_rates = make_possible_rates(factors)
         # Restrict allowed rates to > 1kHz for sc and >5hz for NC, but keep all rates in
         # self._base_rates for allowed goose rate calculation
         if is_superconducting:

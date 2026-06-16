@@ -122,7 +122,7 @@ def test_nc_sequences():
     event_names = ["On Time", "Goose", "All Shots"]
 
     #iterate through all rates and offsets
-    all_rates =  xpm_prog.make_base_rates(xpm_prog.nc_factors)
+    all_rates =  xpm_prog.make_possible_rates(xpm_prog.nc_factors)
     for rate in all_rates:
         base_div = 120//rate
         goose_rates =  xpm_prog.allowed_goose_rates(rate,all_rates)

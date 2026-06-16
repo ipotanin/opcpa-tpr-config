@@ -14,7 +14,7 @@ sc_factors = [2, 2, 2, 5, 5, 5, 5, 7]  # 35000 (remove 13, 2, add 1)
 nc_factors = [2, 2, 2, 3, 5]# 120Hz  (independent of 910k factors)
 
 
-def make_base_rates(laser_factors):
+def make_possible_rates(laser_factors):
     """
     Generate a list of factors --> rates (TPG second)
     """
@@ -32,19 +32,27 @@ def make_base_rates(laser_factors):
     return sorted(list(f))
 
 
-def allowed_goose_rates(base_rate, rate_list):
+def allowed_goose_rates(laser_rate, rate_list):
     """
     Return a dict of allowed goose rates, based on the base rate of the laser
-    and a dictionary of allowed base rates created using make_base_rates().
+    and a dictionary of allowed base rates created using make_laser_rates().
     """
 
-    return [rate for rate in rate_list if rate < base_rate]
+    return [rate for rate in rate_list if rate < laser_rate]
 
+def validate_goose_len(base_div, goose_div, goose_len):
+    """ Quick check for goose len to validate user input """
+    if goose_len < 1:
+        return 1
+    max_goose =   (goose_div//base_div) - 1
+    return min(max_goose, goose_len)
 
 # Selected base rate + goose rate --> pulse sequence
 def make_sequence_sc(base_div, goose_div=None, goose_len=1, goose_start=1, offset=None, debug=False):
     # Do some setup
     instrset = []
+
+    goose_len = validate_goose_len(base_div,goose_div, goose_len)
 
     # Insert bucket offset if it is present
     if offset is not None and offset != 0:
@@ -122,6 +130,8 @@ def make_sequence_nc(base_div, goose_div=None, goose_len=1, goose_start=1, debug
  
     # Do some setup
     instrset = []
+
+    goose_len = validate_goose_len(base_div,goose_div, goose_len)
     
     fiducial_marker = acRateHzToMarker["60Hz"] 
    
@@ -271,22 +281,18 @@ def _add_inner_sequence(instrset: list, offset=None, final=False):
         logger.debug("FixedRateSync(marker='70kH', occ=1)")
     return instrset
 
-def plot_sequence(instrset: list) -> None:
-    """Plot the pulse sequence. TODO: implement visualization."""
-    logger.info("Plotting not yet implemented")
 
-
-def program_xpm(bay: int, engine: int, base_rate: int, goose_rate: int, offset: int) -> None:
+def program_xpm(bay: int, engine: int, laser_rate: int, goose_rate: int, offset: int, xpm_pv="DAQ:DEH:XMP:0") -> None:
     """Build and program the XPM sequence for a given bay/engine."""
-    base_list = make_base_rates(sc_factors)
+    base_list = make_possible_rates(sc_factors)
 
-    if base_rate not in base_list:
+    if laser_rate not in base_list:
         raise ValueError(
-            f"Base rate {base_rate} is not one of the available laser "
+            f"Base rate {laser_rate} is not one of the available laser "
             f"rates: {base_list}"
         )
 
-    goose_list = allowed_goose_rates(base_rate, base_list)
+    goose_list = allowed_goose_rates(laser_rate, base_list)
 
     if goose_rate not in goose_list:
         raise ValueError(
@@ -295,13 +301,12 @@ def program_xpm(bay: int, engine: int, base_rate: int, goose_rate: int, offset: 
         )
 
     seqdesc = {0: f"Bay {bay} On Time", 1: f"Bay {bay} Off Time", 2: "", 3: ""}
-    base_div = 910000 // int(base_rate)
+    base_div = 910000 // int(laser_rate)
     goose_div = 910000 // int(goose_rate)
     inst = make_sequence_sc(base_div, goose_div, offset, True)
 
-    logger.info(f"Programming XPM: bay={bay} engine={engine} base_rate={base_rate} goose_rate={goose_rate} offset={offset}")
+    logger.info(f"Programming XPM: bay={bay} engine={engine} laser_rate={laser_rate} goose_rate={goose_rate} offset={offset}")
 
-    xpm_pv = "DAQ:NEH:XPM:0"
     seqcodes_pv = Pv(f'{xpm_pv}:SEQCODES', isStruct=True)
     seqcodes = seqcodes_pv.get()
     desc = seqcodes.value.Description
@@ -333,16 +338,20 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="XPM sequence programmer")
 
     parser.add_argument(
-        "base_rate", type=int,
+        "--mode", type=str, choices=["sc", "nc"], default="sc",
+        help="Timing mode: 'sc' for superconducting (910kHz base), 'nc' for normal conducting (120Hz base) (default: sc)"
+    )
+    parser.add_argument(
+        "laser_rate", type=int, nargs="?", default=None,
         help="Desired laser output rep rate (total)"
     )
     parser.add_argument(
-        "goose_rate", type=int,
-        help="Desired laser goose rate (sub-harmonic of base_rate)"
+        "goose_rate", type=int, nargs="?", default=None,
+        help="Desired laser goose rate (sub-harmonic of laser_rate)"
     )
     parser.add_argument(
-        "offset", type=int,
-        help="Desired 910 kHz bucket offset"
+        "offset", type=int, nargs="?", default=0,
+        help="Desired 910 kHz bucket offset (default: 0)"
     )
     parser.add_argument(
         "--bay", type=int, choices=[2, 3], default=None,
@@ -369,8 +378,8 @@ if __name__ == "__main__":
         help="Disable debug-level log messages"
     )
     parser.add_argument(
-        "--plot", action="store_true", default=False,
-        help="Plot the generated pulse sequence"
+        "--list", action="store_true", default=False,
+        help="List possible base rates and exit"
     )
 
     args = parser.parse_args()
@@ -382,20 +391,43 @@ if __name__ == "__main__":
         format="%(asctime)s %(name)s [%(levelname)s] %(message)s",
     )
 
+    # Select rate factors and sequence builder based on mode
+    if args.mode == "sc":
+        rate_factors = sc_factors
+        clock_rate = 910000
+        make_sequence = make_sequence_sc
+    else:
+        rate_factors = nc_factors
+        clock_rate = 120
+        make_sequence = make_sequence_nc
+
+    base_list = make_possible_rates(rate_factors)
+
+    # --list: print possible rates and exit
+    if args.list:
+        print(f"Mode: {args.mode} (clock={clock_rate} Hz)")
+        print(f"Possible base rates (divisors): {base_list}")
+        if args.laser_rate is not None:
+            goose_list = allowed_goose_rates(args.laser_rate, base_list)
+            print(f"Possible goose rates for laser_rate={args.laser_rate}: {goose_list}")
+        raise SystemExit(0)
+
+    # Positional args are required when not just listing
+    if args.laser_rate is None or args.goose_rate is None:
+        parser.error("laser_rate and goose_rate are required (use --list to see options)")
+
     # Validate bay/engine are provided when not dry-running
     if not args.dry_run:
         if args.bay is None or args.engine is None:
             parser.error("--bay and --engine are required when not using --dry-run")
 
-    base_list = make_base_rates(sc_factors)
-
-    if args.base_rate not in base_list:
+    if args.laser_rate not in base_list:
         parser.error(
-            f"Base rate {args.base_rate} is not one of the available laser "
-            f"rates: {base_list}"
+            f"On-time rate {args.laser_rate} is not one of the available "
+            f"{args.mode} rates: {base_list}"
         )
 
-    goose_list = allowed_goose_rates(args.base_rate, base_list)
+    goose_list = allowed_goose_rates(args.laser_rate, base_list)
 
     if args.goose_rate not in goose_list:
         parser.error(
@@ -403,18 +435,15 @@ if __name__ == "__main__":
             f"rates: {goose_list}"
         )
 
-    base_div = 910000 // args.base_rate
-    goose_div = 910000 // args.goose_rate
-    inst = make_sequence_sc(base_div, goose_div, args.offset, debug=args.debug)
+    base_div = clock_rate // args.laser_rate
+    goose_div = clock_rate // args.goose_rate
+    inst = make_sequence(base_div, goose_div, offset=args.offset, debug=args.debug)
 
-    logger.info(f"Generated sequence with {len(inst)} instructions")
+    logger.info(f"Generated {args.mode} sequence with {len(inst)} instructions")
     for i, instr in enumerate(inst):
         logger.debug(f"  [{i}] {instr}")
-
-    if args.plot:
-        plot_sequence(inst)
 
     if args.dry_run:
         logger.info("Dry run complete — no hardware programmed")
     else:
-        program_xpm(args.bay, args.engine, args.base_rate, args.goose_rate, args.offset)
+        program_xpm(args.bay, args.engine, args.laser_rate, args.goose_rate, args.offset)
