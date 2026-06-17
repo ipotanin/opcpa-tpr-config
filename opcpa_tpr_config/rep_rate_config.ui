@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>279</width>
-    <height>443</height>
+    <height>482</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -50,6 +50,12 @@
      </item>
      <item row="1" column="1">
       <widget class="PyDMLabel" name="on_time_ec_rbv">
+       <property name="maximumSize">
+        <size>
+         <width>100</width>
+         <height>16777215</height>
+        </size>
+       </property>
        <property name="toolTip">
         <string/>
        </property>
@@ -60,6 +66,12 @@
      </item>
      <item row="2" column="1">
       <widget class="PyDMLabel" name="off_time_ec_rbv">
+       <property name="maximumSize">
+        <size>
+         <width>100</width>
+         <height>16777215</height>
+        </size>
+       </property>
        <property name="toolTip">
         <string/>
        </property>
@@ -70,6 +82,12 @@
      </item>
      <item row="2" column="2">
       <widget class="PyDMLabel" name="off_time_rate_rbv">
+       <property name="maximumSize">
+        <size>
+         <width>100</width>
+         <height>16777215</height>
+        </size>
+       </property>
        <property name="toolTip">
         <string/>
        </property>
@@ -101,6 +119,12 @@
      </item>
      <item row="1" column="2">
       <widget class="PyDMLabel" name="on_time_rate_rbv">
+       <property name="maximumSize">
+        <size>
+         <width>100</width>
+         <height>16777215</height>
+        </size>
+       </property>
        <property name="toolTip">
         <string/>
        </property>
@@ -118,6 +142,12 @@
      </item>
      <item row="3" column="1">
       <widget class="PyDMLabel" name="all_shots_ec_rbv">
+       <property name="maximumSize">
+        <size>
+         <width>100</width>
+         <height>16777215</height>
+        </size>
+       </property>
        <property name="toolTip">
         <string/>
        </property>
@@ -128,6 +158,12 @@
      </item>
      <item row="3" column="2">
       <widget class="PyDMLabel" name="all_shots_rate_rbv">
+       <property name="maximumSize">
+        <size>
+         <width>100</width>
+         <height>16777215</height>
+        </size>
+       </property>
        <property name="toolTip">
         <string/>
        </property>
@@ -156,6 +192,27 @@
       <property name="bottomMargin">
        <number>0</number>
       </property>
+      <item>
+       <widget class="QLabel" name="nc_timeslot_label">
+        <property name="text">
+         <string>Start Timeslot</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QComboBox" name="nc_timeslot_selector">
+        <item>
+         <property name="text">
+          <string>TS1</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>TS4</string>
+         </property>
+        </item>
+       </widget>
+      </item>
      </layout>
     </widget>
    </item>
@@ -230,6 +287,12 @@
           </item>
           <item>
            <widget class="PyDMLabel" name="sc_bucket_rbv">
+            <property name="maximumSize">
+             <size>
+              <width>50</width>
+              <height>16777215</height>
+             </size>
+            </property>
             <property name="toolTip">
              <string/>
             </property>
@@ -336,6 +399,12 @@
           </item>
           <item>
            <widget class="PyDMLabel" name="nc_bucket_rbv">
+            <property name="maximumSize">
+             <size>
+              <width>50</width>
+              <height>16777215</height>
+             </size>
+            </property>
             <property name="toolTip">
              <string/>
             </property>
@@ -393,28 +462,6 @@
      </item>
      <item>
       <widget class="QComboBox" name="goose_rate_box"/>
-     </item>
-     <item>
-      <widget class="QLabel" name="goose_rate_label_3">
-       <property name="sizePolicy">
-        <sizepolicy hsizetype="MinimumExpanding" vsizetype="Preferred">
-         <horstretch>0</horstretch>
-         <verstretch>0</verstretch>
-        </sizepolicy>
-       </property>
-       <property name="maximumSize">
-        <size>
-         <width>50</width>
-         <height>16777215</height>
-        </size>
-       </property>
-       <property name="text">
-        <string>(Rate)</string>
-       </property>
-       <property name="alignment">
-        <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-       </property>
-      </widget>
      </item>
     </layout>
    </item>
@@ -514,6 +561,12 @@
          <horstretch>0</horstretch>
          <verstretch>0</verstretch>
         </sizepolicy>
+       </property>
+       <property name="maximumSize">
+        <size>
+         <width>120</width>
+         <height>16777215</height>
+        </size>
        </property>
        <property name="toolTip">
         <string/>
