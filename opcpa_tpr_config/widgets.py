@@ -842,7 +842,7 @@ class UserConfigDisplay(Display):
         )
 
         xpm_pv = self._config['main'].get('xpm_pv', None)
-        if xpm_pv is None:
+        if xpm_pv is not None:
             write_xpm_config(xpm_pv, self._engine1, seqdesc, instrset)
 
     def apply_base_rates(self):
