@@ -7,6 +7,21 @@ main:
     notepad_pv: "LAS:NEH:BAY1:PVPAD"
     engine1: "0"
     engine2: "1"
-    title: "NEH Laser Hall Bay 3 OPCPA Rep. Rate Configuration"
+    title: "NEH Laser Hall Bay 1 Rep. Rate Configuration"
     bay: "Bay 1"
 
+    laser_database: "neh_bay1_db.json"
+    devices:
+        Goose:
+            rbvs: ["name", "eventrate", "ratemode", "seqcode", "width_setpoint", "delay_setpoint", "operation", "enable_ch_cmd"]
+            show: True
+        Base:
+            rbvs: ["name", "eventrate", "ratemode", "seqcode", "width_setpoint", "delay_setpoint", "operation", "enable_ch_cmd"]
+            show: True
+
+goose_arrival_configs:
+  cfg_goose_off:
+    desc: "Goose off"
+
+  cfg_late:
+    desc: "Late"
