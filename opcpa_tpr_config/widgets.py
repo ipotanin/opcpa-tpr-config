@@ -229,7 +229,7 @@ class LaserConfigDisplay(Display):
         Modify RBV widgets to use the PV(s) specified in the config file.
         """
         # Event code data
-        xpm_pv = self._config['main']['xpm_pv']
+        xpm_pv = self._config['main'].get('xpm_pv', "NA")
         on_time_idx = self._engine1 * 4
         off_time_idx = (self._engine1 * 4) + 1
         all_shots_idx = (self._engine1 * 4) + 2
@@ -362,7 +362,9 @@ class LaserConfigDisplay(Display):
         return int(self.goose_rate_box.currentText())
 
     def update_goose_arrival(self):
-        cfgs = self._config['goose_arrival_configs']
+        cfgs = self._config.get('goose_arrival_configs', None)
+        if cfgs is None:
+            return
         if cfgs is not None:
             logger.debug(f"Goose arrival configs: {cfgs}")
             for name, cfg in cfgs.items():
@@ -457,12 +459,15 @@ class ExpertDisplay(Display):
         if self._config is None:
             raise ValueError(f"Could not read config file {config}")
 
-        if self._config is not None:
+        happi_db_path = self._config['main'].get('laser_database',None)
+        if happi_db_path is not None:
             self._db = happi.Client(
-                path=self._config['main']['laser_database']
+                path=happi_db_path
             )
+        else:
+            self._db = None
 
-        xpm_pv = self._config['main']['xpm_pv']
+        xpm_pv = self._config['main'].get('xpm_pv', "NA")
         self.xpm_table.set_channel(f"pva://{xpm_pv}:SEQCODES")
 
         self.configure_rbv_frames()
@@ -836,8 +841,9 @@ class UserConfigDisplay(Display):
             bay=self._config['main']['bay'],
         )
 
-        xpm_pv = self._config['main']['xpm_pv']
-        write_xpm_config(xpm_pv, self._engine1, seqdesc, instrset)
+        xpm_pv = self._config['main'].get('xpm_pv', None)
+        if xpm_pv is None:
+            write_xpm_config(xpm_pv, self._engine1, seqdesc, instrset)
 
     def apply_base_rates(self):
         """
@@ -852,9 +858,10 @@ class UserConfigDisplay(Display):
             offset=self.offset,
             bay=self._config['main']['bay'],
         )
-
-        xpm_pv = self._config['main']['xpm_pv']
-        write_xpm_config(xpm_pv, self._engine2, seqdesc, instrset)
+    
+        xpm_pv = self._config['main'].get('xpm_pv', None)
+        if xpm_pv is not None:
+            write_xpm_config(xpm_pv, self._engine2, seqdesc, instrset)
 
     def set_tic_enable(self, enable):
         """
