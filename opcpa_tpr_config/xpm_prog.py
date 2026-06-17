@@ -42,6 +42,8 @@ def allowed_goose_rates(laser_rate, rate_list):
 
 def validate_goose_len(base_div, goose_div, goose_len):
     """ Quick check for goose len to validate user input """
+    if goose_div is None:
+        return 1
     if goose_len < 1:
         return 1
     max_goose =   (goose_div//base_div) - 1
