@@ -37,10 +37,16 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    log_level = logging.DEBUG if args.debug else logging.INFO
     logging.basicConfig(
-        level=log_level,
+        level=logging.WARNING,
         format="%(asctime)s %(name)s [%(levelname)s] %(message)s",
     )
+    log_level = logging.DEBUG if args.debug else logging.INFO
+    loggers = [
+        logging.getLogger("widgets"),
+        logging.getLogger("xpm_prog")
+    ]
+    for logger in loggers:
+        logger.setLevel(log_level)
 
     main(config=args.config)
