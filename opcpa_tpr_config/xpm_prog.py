@@ -426,7 +426,7 @@ if __name__ == "__main__":
         help="Desired 910 kHz bucket offset (default: 0)"
     )
     parser.add_argument(
-        "--bay", type=int, choices=[2, 3], default=None,
+        "--bay", type=int, choices=[1, 2, 3], default=None,
         help="Laser bay to program (required unless --dry-run)"
     )
     parser.add_argument(

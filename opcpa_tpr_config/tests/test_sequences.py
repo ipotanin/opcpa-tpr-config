@@ -107,7 +107,8 @@ def simulate_laser_case(
     start_ts1: bool = True,
     assert_check: bool = False
 ) -> tuple:
-    """Build, simulate 2 periods, and report stats for the 2nd period.
+    """
+    Build, simulate 2 periods, and report stats for the 2nd period.
 
     The 1st period is discarded to skip initial offset part of the sequence.
     Asserts that event counts in the 2nd period match expected rates.
@@ -150,8 +151,7 @@ def simulate_laser_case(
         ontime = stats[272]["count"]
         all_shots = stats[274]["count"]
 
-        if rate != all_shots:
-            print(f"ERROR: Simulated rate {all_shots}, Expected Rate {rate}")
+        assert rate != all_shots, f"ERROR: Simulated rate {all_shots}, Expected Rate {rate}"
 
         #check goose shots/:
         if goose_rate is not None:
@@ -160,7 +160,7 @@ def simulate_laser_case(
             assert 273 in stats, f"ERROR: no goose shots detected, Expected goose rate{expected}"
             goose = stats[273]["count"]
             # TODO: come up with a reliable way to assert number of goose,
-            # since sequences can start at different locations, this is not strait forward
+            # since sequences can start at different locations, this is not straight forward
             # assert abs(goose - expected) <= 1, f"ERROR: Simulated goose {goose}, Expected Rate {expected}"
         else:
             if 273 in stats:

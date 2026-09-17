@@ -423,6 +423,7 @@ class LaserConfigDisplay(Display):
         try:
             goose_len = int(self.goose_len_input.text())
         except ValueError:
+            logger.warning(f"invalid goose len {self.goose_len_input.text()}, reverted to 1")
             goose_len = 1
         base_div = self._clock_rate // self.base_rate
         goose_div = self._clock_rate // self.goose_rate

@@ -45,7 +45,7 @@ class SequencePlotter:
         all_x = np.concatenate([t[0] for t in self._traces])
         x_min, x_max = all_x.min(), all_x.max()
         if self._is_sc:
-            clock_period = 910000 / 35000  # 26 frames per 35kHz tick
+            clock_period = 26  # 910000 / 35000 frames per 35kHz tick
         else:
             clock_period = 3  # 360/120 = 3 AC frames per 120Hz tick
         ticks = np.arange(
