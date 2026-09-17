@@ -59,7 +59,9 @@ class NCMetadataDisplay(Display):
 
         logger.debug(f"NC metadata base PV: {nc_base}")
 
-        # TODO: find relevant NC metadata PVs to display
+        self.rate_rbv.set_channel(f"ca://{nc_base}:LCLSBEAMRATE")
+        self.hard_rate_rbv.set_channel(f"ca://{nc_base}:NC_HARDRATE")
+        self.soft_rate_rbv.set_channel(f"ca://{nc_base}:NC_SOFTRATE")
 
         # self.pattern_name_rbv.set_channel(f"ca://{nc_base}:NAME")
 
