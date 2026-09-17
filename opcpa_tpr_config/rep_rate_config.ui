@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>279</width>
-    <height>482</height>
+    <height>505</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -433,7 +433,11 @@
       </widget>
      </item>
      <item>
-      <widget class="QComboBox" name="total_rate_box"/>
+      <widget class="QComboBox" name="total_rate_box">
+       <property name="toolTip">
+        <string>total laser rate</string>
+       </property>
+      </widget>
      </item>
     </layout>
    </item>
@@ -461,7 +465,11 @@
       </widget>
      </item>
      <item>
-      <widget class="QComboBox" name="goose_rate_box"/>
+      <widget class="QComboBox" name="goose_rate_box">
+       <property name="toolTip">
+        <string>goose rate = goose loop rate * goose length</string>
+       </property>
+      </widget>
      </item>
     </layout>
    </item>
@@ -482,6 +490,9 @@
          <verstretch>0</verstretch>
         </sizepolicy>
        </property>
+       <property name="toolTip">
+        <string>how many goose shots to fire sequencially</string>
+       </property>
        <property name="inputMask">
         <string>9</string>
        </property>
@@ -500,7 +511,7 @@
      <item>
       <widget class="QLabel" name="goose_start_label">
        <property name="text">
-        <string>Goose Start Offset</string>
+        <string>Goose Start</string>
        </property>
       </widget>
      </item>
@@ -511,6 +522,9 @@
          <horstretch>0</horstretch>
          <verstretch>0</verstretch>
         </sizepolicy>
+       </property>
+       <property name="toolTip">
+        <string>first shot to goosing (1 indexed)</string>
        </property>
        <property name="inputMask">
         <string>9</string>
