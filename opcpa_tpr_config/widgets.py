@@ -10,11 +10,9 @@ from ophyd import EpicsSignal
 from pydm import Display
 from pydm import widgets as pydm_widgets
 from qtpy import QtWidgets
-from xpm_prog import (allowed_goose_rates, sc_factors, nc_factors,
-                make_possible_rates, validate_goose_len,
-                build_laser_sequence, build_base_sequence,
-                write_xpm_config,
-                )
+from xpm_prog import (allowed_goose_rates, build_base_sequence,
+                      build_laser_sequence, make_possible_rates, nc_factors,
+                      sc_factors, validate_goose_len, write_xpm_config)
 
 logger = logging.getLogger(__name__)
 
@@ -147,7 +145,7 @@ class LaserConfigDisplay(Display):
     nc_bucket_rbv: pydm_widgets.PyDMLabel
     sc_bucket_is_synced: pydm_widgets.PyDMByteIndicator
     sc_bucket_is_synced_label: pydm_widgets.PyDMLabel
-    
+
     start_bucket_inputs_nc: QtWidgets.QWidget
     nc_bucket_edit: QtWidgets.QLineEdit
 
@@ -303,7 +301,7 @@ class LaserConfigDisplay(Display):
         else:
             factors = nc_factors
             self._clock_rate = 120
-        
+
         self._base_rates = make_possible_rates(factors)
         # Restrict allowed rates to > 1kHz for sc and >5hz for NC, but keep all rates in
         # self._base_rates for allowed goose rate calculation
@@ -317,7 +315,7 @@ class LaserConfigDisplay(Display):
             if rate <rate_limit:
                 continue
             self.total_rate_box.addItem(str(rate))
-        
+
         # always select the highest rate when switching menus
         self.total_rate_box.setCurrentIndex(self.total_rate_box.count() - 1)
 
@@ -722,12 +720,12 @@ class UserConfigDisplay(Display):
             self.laser_config_widget.start_timeslot_inputs.show()
             self.laser_config_widget.start_bucket_inputs_sc.hide()
             self.laser_config_widget.start_bucket_inputs_nc.show()
-        
+
 
     @property
     def expert_mode(self):
         return self.expert_checkbox.isChecked()
-    
+
     @property
     def is_superconducting(self):
         return self.nc_sc_selection.currentIndex() == 1
@@ -858,7 +856,7 @@ class UserConfigDisplay(Display):
             offset=self.offset,
             bay=self._config['main']['bay'],
         )
-    
+
         xpm_pv = self._config['main'].get('xpm_pv', None)
         if xpm_pv is not None:
             write_xpm_config(xpm_pv, self._engine2, seqdesc, instrset)

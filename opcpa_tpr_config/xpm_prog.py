@@ -6,7 +6,8 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 from psdaq.cas.pvedit import Pv
-from psdaq.seq.seq import Branch, ControlRequest, FixedRateSync, ACRateSync, acRateHzToMarker
+from psdaq.seq.seq import (ACRateSync, Branch, ControlRequest, FixedRateSync,
+                           acRateHzToMarker)
 from psdaq.seq.seqprogram import SeqUser
 
 factors = [2, 2, 2, 2, 5, 5, 5, 5, 7, 13]  # 910,000
@@ -70,8 +71,8 @@ def make_sequence_sc(base_div, goose_div=None, goose_len=1, goose_start=1, offse
     branch_0 = len(instrset)
     if goose_div not in (None, 0):
         # calculate ontime per goose
-        ontime_per_goose= (goose_div//base_div) - goose_len 
-         
+        ontime_per_goose= (goose_div//base_div) - goose_len
+
         # goosing shots are first, then # of ontime shots per goose
         for i in range(goose_len):
             instrset.append(ControlRequest([1, 2])) # goose + all
@@ -99,9 +100,9 @@ def make_sequence_sc(base_div, goose_div=None, goose_len=1, goose_start=1, offse
 def make_sequence_nc(base_div, start_ts1=True, goose_div=None, goose_len=1, goose_start=1, debug=False):
     """
     Generate an AC sequence at spacing of base_div times the base (120hz) rate for
-    NC operation. 
+    NC operation.
 
-    NOTE:  AC base rates always need to specify a timeslot. 
+    NOTE:  AC base rates always need to specify a timeslot.
            There are 6 time slots each with 60H rate markers.
 
     Parameters
@@ -121,22 +122,22 @@ def make_sequence_nc(base_div, start_ts1=True, goose_div=None, goose_len=1, goos
 
     Notes
     -------
-    
-    Confluence Docs are inconsistent with the library definitions used here! 
+
+    Confluence Docs are inconsistent with the library definitions used here!
     Confluence examples show that "marker 0" corresponds to 60H rate,
     but in the acRateHzToMarker dictionary in seq.py, clearly maps "60H" maps to "marker 5".
 
     I used the library definitions here for correct simulations
     but this should be verified on hardware!
     """
- 
+
     # Do some setup
     instrset = []
 
     goose_len = validate_goose_len(base_div,goose_div, goose_len)
-    
-    fiducial_marker = acRateHzToMarker["60Hz"] 
-   
+
+    fiducial_marker = acRateHzToMarker["60Hz"]
+
     # first sync to starting timeslot
     if start_ts1:
         timeslot_mask = (1<<0)
@@ -153,12 +154,12 @@ def make_sequence_nc(base_div, start_ts1=True, goose_div=None, goose_len=1, goos
         occ = base_div * (goose_start - 1)
         instrset.append(ACRateSync(timeslotm=timeslot_mask, marker=fiducial_marker, occ=occ))
         logger.debug(f"ACRateSync(timeslotm={timeslot_mask}, marker={fiducial_marker}, occ={occ})")
- 
+
     branch_0 = len(instrset)
     if goose_div not in (None, 0):
         # calculate ontime per goose
-        ontime_per_goose= (goose_div//base_div) - goose_len 
-         
+        ontime_per_goose= (goose_div//base_div) - goose_len
+
         # goosing shots are first, then # of ontime shots per goose
         for i in range(goose_len):
             instrset.append(ControlRequest([1, 2])) # goose + all
@@ -197,7 +198,7 @@ def make_base_sequence(offset=None, firstSyncAC=False):
     Notes
     ----
 
-    The AC power line is sampled at 2/14Mhz = 35,714 Hz 
+    The AC power line is sampled at 2/14Mhz = 35,714 Hz
     to guaranteed all AC crossings coincide every two 71428 Hz markers.
 
     During testing it was observed the ACRateSync was observed to have an
@@ -214,7 +215,7 @@ def make_base_sequence(offset=None, firstSyncAC=False):
 
     if firstSyncAC:
         timeslot_mask = (1<<0) | (1<<3)
-        fiducial_marker = acRateHzToMarker["60Hz"] 
+        fiducial_marker = acRateHzToMarker["60Hz"]
         instrset.append(ACRateSync(timeslotm=timeslot_mask, marker=fiducial_marker, occ=1))
         logger.debug(f"ACRateSync(timeslotm={timeslot_mask}, marker={fiducial_marker}, occ=1)")
         # needed so first offset_request() starts at a 70H marker
@@ -253,12 +254,12 @@ def _add_offset_request(instrset: list, request, offset) -> list:
 
 def _add_inner_sequence(instrset: list, offset=None, final=False):
     """
-    To make the nc sequence a little more readable, 
+    To make the nc sequence a little more readable,
     a repeated section is broken out here
 
     Loop 1:
-    75kH + 35kH markers per 100H marker 
-    
+    75kH + 35kH markers per 100H marker
+
     final = true, do not add 100H last marker
     """
     # define all spacings in terms of smallest marker
@@ -266,7 +267,7 @@ def _add_inner_sequence(instrset: list, offset=None, final=False):
     spacing_35k = 2
     spacing_100 = 700
 
-    loop_count = spacing_100//spacing_35k - 2 
+    loop_count = spacing_100//spacing_35k - 2
     branch = len(instrset)
     _add_offset_request(instrset, [0], offset) #70kH
     instrset.append(FixedRateSync(marker="70kH", occ=1))

@@ -1,10 +1,11 @@
 """ Tests for XPM sequence generation"""
 
+from pprint import pprint
+
 import numpy as np
 import psdaq.seq.seq
 from psdaq.seq.globals import *
 from psdaq.seq.seqplot import *
-from pprint import pprint
 
 from opcpa_tpr_config import xpm_prog
 
@@ -81,7 +82,7 @@ def test_base_sequences():
     )
     event_names = ['70kH', '35kH', '100H', '5H']
     data = simulate_sequence(
-        "NC Base Sequence", 
+        "NC Base Sequence",
         instrset,
         event_names,
         stop=910000,
@@ -158,7 +159,7 @@ def simulate_laser_case(
             expected = goose_rate * exp_goose_len
             assert 273 in stats, f"ERROR: no goose shots detected, Expected goose rate{expected}"
             goose = stats[273]["count"]
-            # TODO: come up with a reliable way to assert number of goose, 
+            # TODO: come up with a reliable way to assert number of goose,
             # since sequences can start at different locations, this is not strait forward
             # assert abs(goose - expected) <= 1, f"ERROR: Simulated goose {goose}, Expected Rate {expected}"
         else:
@@ -203,4 +204,3 @@ if __name__ == "__main__":
     test_base_sequences()
     test_all_sequences(1000, is_sc=True)
     test_all_sequences(120, is_sc=False)
-
